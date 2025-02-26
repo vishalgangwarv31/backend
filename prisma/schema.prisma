@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Admin {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  password   String
+  createdAt  DateTime @default(now())
+  type       String?
+  pocPhone   String?  
+  pocName    String?
+  gstNumber  String?  
+  dpiit      Boolean?
+  dpiitDate  DateTime?
+
+  tdsFile   String?
+  gstFile   String?
+  ndaFile   String?
+  dpiitFile String?
+  agreementFile String?
+  qunatifoFile  String?
+  panCard   String?
+  udhyanFile String?
+
+  orders     Order[] 
+}
+
+model Firm {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  workType  String?
+  startup   Boolean?
+
+  agreementFile String?
+  ndaFile   String?
+
+  orders    Order[]
+}
+
+model Order {
+  id                    Int    @id @default(autoincrement())
+  userId                Int
+  firmId                Int
+
+  dateOfOrder           String?
+  typeOfOrder           String?
+  payementExpected      String?
+  amountCharged         Int?
+  amountPaid            Int?
+  orderStatus           String  @default("yet to start")
+  commentStatusCycle    String[]
+  dateOdExpectation     String?
+
+  documentProvided      String[]
+  invoiceUploaded       String[]
+  fileUploaded          String[]   //lawyer
+  
+  
+  nextActionLawyer      String?
+  nextActionClient      String?
+  govtAppNumber         Int?
+  dateOfFilling         String?
+  lawyerRefrenceNumber  Int?
+  inmNumber             String?
+  orderCompleteDate     String?      
+
+  user          User   @relation(fields: [userId], references: [id])
+  firm          Firm   @relation(fields: [firmId], references: [id])
+
+  createdAt     DateTime @default(now())
+}

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Firm" ALTER COLUMN "workType" DROP NOT NULL,
+ALTER COLUMN "startup" DROP NOT NULL;
