@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { login , signup , createUser , createContractor , createOrder ,updateOrder ,getUsers, downloadFile , getContractor , getOrder, getFile, forgetPassword, resetPassword} from '../controller/adminController'
+import { login , signup , createUser , createContractor , createOrder ,updateOrder ,getUsers, downloadFile , getContractor , getOrder, getFile, forgetPassword, resetPassword, order} from '../controller/adminController'
 import asyncHandler from 'express-async-handler'
 import { adminAuthMiddleware } from "../middleware/adminAuthMiddleware"
 import { upload } from "../config/multerConfig"
@@ -24,6 +24,7 @@ adminRoutes.post('/update-order',adminAuthMiddleware, upload.fields([
 adminRoutes.get('/get-users',adminAuthMiddleware, getUsers);
 adminRoutes.get('/get-contractor', adminAuthMiddleware , getContractor);
 adminRoutes.get('/download-file', adminAuthMiddleware , downloadFile);
+adminRoutes.get('/get-order', adminAuthMiddleware , order);
 adminRoutes.get('/order/:id', adminAuthMiddleware,  getOrder);
 adminRoutes.get('/file/:folder/:filename',adminAuthMiddleware, getFile);
 

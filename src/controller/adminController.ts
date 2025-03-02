@@ -476,7 +476,7 @@ export const getFile = (req: Request, res: Response): void => {
   };
   
 
-  export const getOrder = async (req: Request, res: Response): Promise<void> => {
+export const getOrder = async (req: Request, res: Response): Promise<void> => {
     try {
       const orderId = parseInt(req.params.id);
   
@@ -513,3 +513,18 @@ export const getFile = (req: Request, res: Response): void => {
       });
     }
   };
+
+export const order = async (req : Request , res : Response) =>{
+    try {
+        const data = await prisma.order.findMany();
+        res.status(200).json({
+            data
+        })
+    } catch (error) {
+        res.status(400).json({
+            message : "can not get orders"
+        })       
+    }
+    
+
+}

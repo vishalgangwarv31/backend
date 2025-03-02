@@ -21,6 +21,7 @@ adminRoutes.post('/update-order', adminAuthMiddleware_1.adminAuthMiddleware, mul
 adminRoutes.get('/get-users', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.getUsers);
 adminRoutes.get('/get-contractor', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.getContractor);
 adminRoutes.get('/download-file', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.downloadFile);
+adminRoutes.get('/get-order', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.order);
 adminRoutes.get('/order/:id', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.getOrder);
 adminRoutes.get('/file/:folder/:filename', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.getFile);
 exports.default = adminRoutes;
