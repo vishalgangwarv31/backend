@@ -1,13 +1,15 @@
 import { Request , Response } from "express";
-import { sign } from "jsonwebtoken";
+import { sign, verify } from "jsonwebtoken";
 import prisma from "../prisma/client";
 import bcrypt from 'bcrypt';
 import dotenv from "dotenv";
 import { IGetUserAuthInfoRequest } from "../config/definationFile";
 import { uploadFile , getPublicUrl } from "../utils/uploadFile";
+import nodemailer from 'nodemailer'
 
 dotenv.config();
 const JWT_SECRET = process.env.USER_AUTH_JWT as string;
+const APP_PASSWORD = process.env.APP_PASSWORD as string;
 
 export const login = async (req: Request , res : Response ): Promise<void> =>{
     try {
@@ -44,6 +46,96 @@ export const login = async (req: Request , res : Response ): Promise<void> =>{
         console.error(error);
         res.status(400).json({ error: "Invalid input fields" });
     }
+}
+
+export const forgetPassword = async( req : Request , res : Response): Promise<void> =>{
+    try {
+        const {email} = req.body;
+        const oldUser = await prisma.user.findUnique({
+            where : {email : email}
+        })
+
+        if(!oldUser){
+            res.sendStatus(200).json({message : "user doesnt exist"})
+            return;
+        }
+
+        const secert = JWT_SECRET + oldUser.password;
+        const token = sign({email: oldUser.email, id : oldUser.id},secert, {expiresIn : "10m"});
+        const link =  `http://localhost:5174/api/user/reset-password/${oldUser.id}/${token}`;
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+              user: 'vishalgangwar8696@gmail.com',
+              pass: `${APP_PASSWORD}`
+            }
+          });
+          
+          const mailOptions = {
+            from: 'youremail@gmail.com',
+            to: 'g.vishal.8696@gmail.com',
+            subject: 'Reset Password (valid for 10 mins)',
+            text: `click on the link below to change your user password ${link}`
+          };
+          
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.log(error);
+            } else {
+              console.log('Email sent');
+            }
+          });
+          
+        res.status(200).json({
+            message : "reset link is sent to your mail"
+        })
+    } catch (error) {
+        res.status(404).json({message : "cant update password now"})
+    }
+}
+
+export const resetPassword = async (req : Request , res : Response) : Promise<void>=>{
+    const id = parseInt(req.params.id);
+const token = req.params.token;
+const password = req.body.password;
+
+const oldUser = await prisma.user.findUnique({
+    where: { id: id }
+});
+
+if (!oldUser) {
+    res.json({
+        message: "user doesn't exist"
+    });
+    return;
+}
+
+const secret = JWT_SECRET + oldUser?.password;
+
+try {
+    const check = verify(token, secret);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    // console.log(hashedPassword);
+
+    const newUser = await prisma.user.update({
+        where: { id: id },
+        data: {
+            password: hashedPassword
+        }
+    });
+    console.log(newUser);
+
+    res.json({
+        message: "password changed"
+    });
+    return;
+} catch (error) {
+    res.json({
+        message: "something went wrong"
+    });
+}
+
 }
 
 export const getUser = async (req : Request , res : Response): Promise<void> =>{
@@ -113,11 +205,10 @@ interface MulterFiles {
     udhyanFile?: Express.Multer.File[];
 }
 
-
-export const updateUser = async (req : Request , res : Response) =>{
+export const updateUser = async (req: Request, res: Response):Promise<void> => {
     try {
-        const temp = req.body.id;
-        const orderId = parseInt(temp);
+        const temp = (req as IGetUserAuthInfoRequest).user;
+        const id = temp.id;
         const gstNumber = req.body.gstNumber;
         const name = req.body.name;
         const type = req.body.type;
@@ -144,6 +235,13 @@ export const updateUser = async (req : Request , res : Response) =>{
         let agreementFilePath: string | null = null;
         let qunatifoFilePath: string | null = null;
         let udhyanFilePath: string | null = null;
+
+        let dpiitBool;
+        if (dpiit === "true") {
+            dpiitBool = true;
+        } else {
+            dpiitBool = false;
+        }
 
         if (panCardFile) {
             panCardPath = await uploadFile(panCardFile, 'pancards');
@@ -177,9 +275,19 @@ export const updateUser = async (req : Request , res : Response) =>{
             udhyanFilePath = await uploadFile(udhyanFile, 'udhyanfiles');
         }
 
+        // Validate and parse dpiitDate
+        let parsedDpiitDate: Date | null = null;
+        if (dpiitDate) {
+            parsedDpiitDate = new Date(dpiitDate);
+            if (isNaN(parsedDpiitDate.getTime())) {
+                res.status(400).json({ message: "Invalid dpiitDate format. Expected ISO-8601 DateTime." });
+                return;
+            }
+        }
+
         const order = await prisma.user.update({
             where: {
-                id: orderId
+                id: id
             },
             data: {
                 name: name,
@@ -187,8 +295,8 @@ export const updateUser = async (req : Request , res : Response) =>{
                 type: type,
                 pocPhone: pocPhone,
                 pocName: pocName,
-                dpiit: dpiit,
-                dpiitDate: dpiitDate,
+                dpiit: dpiitBool,
+                dpiitDate: parsedDpiitDate,
                 panCard: panCardPath,
                 tdsFile: tdsFilePath,
                 gstFile: gstFilePath,
@@ -206,23 +314,24 @@ export const updateUser = async (req : Request , res : Response) =>{
         });
     } catch (error) {
         console.log(error);
-        res.status(401).json({
+        res.status(500).json({
             message: "Can't update user, something went wrong"
         });
     }
 };
 
+
 interface UploadMulterFiles{
     documentProvided?: Express.Multer.File[];
 }
 
-export const updateOrder = async ( req : Request , res : Response) =>{
+export const updateOrder = async (req: Request, res: Response) => {
     try {
         const id = (req as IGetUserAuthInfoRequest).user.id;
         const orderId = parseInt(req.body.orderId);
 
         const existingOrder = await prisma.order.findUnique({
-            where: { id: orderId, userId : id }
+            where: { id: orderId, userId: id }
         });
 
         if (!existingOrder) {
@@ -242,13 +351,16 @@ export const updateOrder = async ( req : Request , res : Response) =>{
             ...documentProvidedPaths
         ];
 
+        const nextActionClient = req.body.nextActionClient;
+
         const order = await prisma.order.update({
             where: {
                 id: orderId,
-                userId : id
+                userId: id
             },
             data: {
                 documentProvided: updatedDocumentProvided,
+                nextActionClient: nextActionClient
             }
         });
 
@@ -256,13 +368,14 @@ export const updateOrder = async ( req : Request , res : Response) =>{
             message: "Order updated",
             order
         });
-    } catch (error) {   
+    } catch (error) {
         console.log(error);
-        res.status(404).json({
-            message : "cant update ur order"
-        })
-    }    
-}
+        res.status(500).json({
+            message: "Can't update order, something went wrong"
+        });
+    }
+};
+
 
 export const downloadFile = async (req : Request, res: Response) =>{
     try {

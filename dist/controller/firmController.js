@@ -12,14 +12,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadFile = exports.updateOrder = exports.orders = exports.getFirm = exports.updateFirm = exports.login = void 0;
+exports.downloadFile = exports.updateOrder = exports.orders = exports.getFirm = exports.updateFirm = exports.resetPassword = exports.forgetPassword = exports.login = void 0;
 const jsonwebtoken_1 = require("jsonwebtoken");
 const client_1 = __importDefault(require("../prisma/client"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const uploadFile_1 = require("../utils/uploadFile");
+const nodemailer_1 = __importDefault(require("nodemailer"));
 dotenv_1.default.config();
 const JWT_SECRET = process.env.FIRM_AUTH_JWT;
+const APP_PASSWORD = process.env.APP_PASSWORD;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const email = req.body.email;
@@ -49,6 +51,86 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.login = login;
+const forgetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { email } = req.body;
+        const oldUser = yield client_1.default.firm.findUnique({
+            where: { email: email }
+        });
+        if (!oldUser) {
+            res.sendStatus(200).json({ message: "firm doesnt exist" });
+            return;
+        }
+        const secert = JWT_SECRET + oldUser.password;
+        const token = (0, jsonwebtoken_1.sign)({ email: oldUser.email, id: oldUser.id }, secert, { expiresIn: "10m" });
+        const link = `http://localhost:5174/api/firm/reset-password/${oldUser.id}/${token}`;
+        const transporter = nodemailer_1.default.createTransport({
+            service: 'gmail',
+            auth: {
+                user: 'vishalgangwar8696@gmail.com',
+                pass: `${APP_PASSWORD}`
+            }
+        });
+        const mailOptions = {
+            from: 'youremail@gmail.com',
+            to: 'g.vishal.8696@gmail.com',
+            subject: 'Reset Password (valid for 10 mins)',
+            text: `click on the link below to change your firm password ${link}`
+        };
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.log(error);
+            }
+            else {
+                console.log('Email sent');
+            }
+        });
+        res.status(200).json({
+            message: "reset link is sent to your mail"
+        });
+    }
+    catch (error) {
+        res.status(404).json({ message: "cant update password now" });
+    }
+});
+exports.forgetPassword = forgetPassword;
+const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const id = parseInt(req.params.id);
+    const token = req.params.token;
+    const password = req.body.password;
+    const oldUser = yield client_1.default.firm.findUnique({
+        where: { id: id }
+    });
+    if (!oldUser) {
+        res.json({
+            message: "firm doesn't exist"
+        });
+        return;
+    }
+    const secret = JWT_SECRET + (oldUser === null || oldUser === void 0 ? void 0 : oldUser.password);
+    try {
+        const check = (0, jsonwebtoken_1.verify)(token, secret);
+        const hashedPassword = yield bcrypt_1.default.hash(password, 10);
+        // console.log(hashedPassword);
+        const newUser = yield client_1.default.firm.update({
+            where: { id: id },
+            data: {
+                password: hashedPassword
+            }
+        });
+        console.log(newUser);
+        res.json({
+            message: "password changed"
+        });
+        return;
+    }
+    catch (error) {
+        res.json({
+            message: "something went wrong"
+        });
+    }
+});
+exports.resetPassword = resetPassword;
 const updateFirm = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     try {
@@ -143,9 +225,7 @@ const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     try {
         const firmId = req.user.id;
         const id = parseInt(req.body.orderId);
-        console.log(firmId);
-        console.log(req.body);
-        const { orderStatus, newCommentStatus, lawyerReferenceNumber, nextActionLawyer, govtAppNumber, dateOfFilling, lawyerRefrenceNumber, inmNumber } = req.body;
+        const { orderStatus, newCommentStatus, lawyerReferenceNumber, nextActionLawyer, govtAppNumber, dateOfFilling, inmNumber } = req.body;
         const lawyerReferenceNumber2 = parseInt(lawyerReferenceNumber);
         const existingOrder = yield client_1.default.order.findUnique({
             where: { id: id, firmId: firmId }
@@ -154,48 +234,60 @@ const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             res.status(404).json({ message: "Order not found" });
             return;
         }
-        const files = req.files;
-        const invoiceUploadedFiles = files.invoiceUploaded || [];
-        const fileUploadedFiles = files.fileUploaded || [];
-        const invoiceUploadedPaths = yield Promise.all(invoiceUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'invoicesUploaded')));
-        const fileUploadedPaths = yield Promise.all(fileUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'lawyerfiles')));
-        const updatedInvoiceUploaded = [
-            ...existingOrder.invoiceUploaded,
-            ...invoiceUploadedPaths
-        ];
-        const updatedFileUploaded = [
-            ...existingOrder.fileUploaded,
-            ...fileUploadedPaths
-        ];
-        const updatedCommentStatusCycle = [
-            ...existingOrder.commentStatusCycle,
-            ...(newCommentStatus ? [newCommentStatus] : [])
-        ];
+        let updatedData = { orderStatus };
+        if (newCommentStatus) {
+            updatedData.commentStatusCycle = [
+                ...(existingOrder.commentStatusCycle || []),
+                newCommentStatus
+            ];
+        }
+        if (req.files) {
+            const files = req.files;
+            const invoiceUploadedFiles = files.invoiceUploaded || [];
+            const fileUploadedFiles = files.fileUploaded || [];
+            if (invoiceUploadedFiles.length > 0) {
+                const invoiceUploadedPaths = yield Promise.all(invoiceUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'invoicesUploaded')));
+                updatedData.invoiceUploaded = [
+                    ...(existingOrder.invoiceUploaded || []),
+                    ...invoiceUploadedPaths
+                ];
+            }
+            if (fileUploadedFiles.length > 0) {
+                const fileUploadedPaths = yield Promise.all(fileUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'lawyerfiles')));
+                updatedData.fileUploaded = [
+                    ...(existingOrder.fileUploaded || []),
+                    ...fileUploadedPaths
+                ];
+            }
+        }
+        if (nextActionLawyer)
+            updatedData.nextActionLawyer = nextActionLawyer;
+        if (govtAppNumber)
+            updatedData.govtAppNumber = govtAppNumber;
+        if (dateOfFilling)
+            updatedData.dateOfFilling = dateOfFilling;
+        if (lawyerReferenceNumber2)
+            updatedData.lawyerReferenceNumber = lawyerReferenceNumber2;
+        if (inmNumber)
+            updatedData.inmNumber = inmNumber;
+        console.log("Updated fields prepared:", updatedData);
         const order = yield client_1.default.order.update({
             where: {
                 id: id,
                 firmId: firmId
             },
-            data: {
-                orderStatus,
-                commentStatusCycle: updatedCommentStatusCycle,
-                invoiceUploaded: updatedInvoiceUploaded,
-                fileUploaded: updatedFileUploaded,
-                nextActionLawyer,
-                govtAppNumber,
-                dateOfFilling,
-                lawyerRefrenceNumber,
-                inmNumber
-            }
+            data: updatedData
         });
+        console.log("Order updated:", order);
         res.status(200).json({
             message: "Order updated",
             order
         });
     }
     catch (error) {
+        console.error("Error updating order:", error);
         res.status(400).json({
-            message: "cant update order"
+            message: "Can't update order"
         });
     }
 });

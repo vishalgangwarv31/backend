@@ -1,13 +1,15 @@
 import { Request , Response } from "express";
-import { sign } from "jsonwebtoken";
+import { sign, verify } from "jsonwebtoken";
 import prisma from "../prisma/client";
 import bcrypt from 'bcrypt';
 import dotenv from "dotenv";
 import { IGetUserAuthInfoRequest } from "../config/definationFile";
 import { uploadFile , getPublicUrl} from "../utils/uploadFile";
+import nodemailer from 'nodemailer'
 
 dotenv.config();
 const JWT_SECRET = process.env.FIRM_AUTH_JWT as string;
+const APP_PASSWORD = process.env.APP_PASSWORD as string;
 
 export const login = async (req: Request , res : Response ): Promise<void> =>{
     try {
@@ -44,6 +46,95 @@ export const login = async (req: Request , res : Response ): Promise<void> =>{
         console.error(error);
         res.status(400).json({ error: "Invalid input fields" });
     }
+}
+
+export const forgetPassword = async( req : Request , res : Response): Promise<void> =>{
+    try {
+        const {email} = req.body;
+        const oldUser = await prisma.firm.findUnique({
+            where : {email : email}
+        })
+
+        if(!oldUser){
+            res.sendStatus(200).json({message : "firm doesnt exist"})
+            return;
+        }
+
+        const secert = JWT_SECRET + oldUser.password;
+        const token = sign({email: oldUser.email, id : oldUser.id},secert, {expiresIn : "10m"});
+        const link =  `http://localhost:5174/api/firm/reset-password/${oldUser.id}/${token}`;
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+              user: 'vishalgangwar8696@gmail.com',
+              pass: `${APP_PASSWORD}`
+            }
+          });
+          
+          const mailOptions = {
+            from: 'youremail@gmail.com',
+            to: 'g.vishal.8696@gmail.com',
+            subject: 'Reset Password (valid for 10 mins)',
+            text: `click on the link below to change your firm password ${link}`
+          };
+          
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.log(error);
+            } else {
+              console.log('Email sent');
+            }
+          });
+          
+        res.status(200).json({
+            message : "reset link is sent to your mail"
+        })
+    } catch (error) {
+        res.status(404).json({message : "cant update password now"})
+    }
+}
+
+export const resetPassword = async (req : Request , res : Response) : Promise<void>=>{
+        const id = parseInt(req.params.id);
+        const token = req.params.token;
+        const password = req.body.password;
+
+        const oldUser = await prisma.firm.findUnique({
+            where: { id: id }
+        });
+
+        if (!oldUser) {
+            res.json({
+                message: "firm doesn't exist"
+            });
+            return;
+        }
+
+        const secret = JWT_SECRET + oldUser?.password;
+
+        try {
+            const check = verify(token, secret);
+            const hashedPassword = await bcrypt.hash(password, 10);
+            // console.log(hashedPassword);
+
+            const newUser = await prisma.firm.update({
+                where: { id: id },
+                data: {
+                    password: hashedPassword
+                }
+            });
+            console.log(newUser);
+
+            res.json({
+                message: "password changed"
+            });
+            return;
+        } catch (error) {
+            res.json({
+                message: "something went wrong"
+            });
+        }
 }
 
 interface MulterFiles {
@@ -145,18 +236,16 @@ export const orders = async (req : Request , res : Response) => {
     }
 }
 
-interface UpdateMulterFiles{
+interface UpdateMulterFiles {
     invoiceUploaded?: Express.Multer.File[];
     fileUploaded?: Express.Multer.File[];
 }
 
-export const updateOrder = async (req: Request , res : Response) =>{
+export const updateOrder = async (req: Request, res: Response) : Promise<void> => {
     try {
-
         const firmId = (req as IGetUserAuthInfoRequest).user.id;
         const id = parseInt(req.body.orderId);
-        console.log(firmId)
-        console.log(req.body);
+
         const {
             orderStatus,
             newCommentStatus,
@@ -164,14 +253,13 @@ export const updateOrder = async (req: Request , res : Response) =>{
             nextActionLawyer,
             govtAppNumber,
             dateOfFilling,
-            lawyerRefrenceNumber,
             inmNumber
         } = req.body;
 
         const lawyerReferenceNumber2 = parseInt(lawyerReferenceNumber);
 
         const existingOrder = await prisma.order.findUnique({
-            where: { id: id , firmId : firmId }
+            where: { id: id, firmId: firmId }
         });
 
         if (!existingOrder) {
@@ -179,64 +267,70 @@ export const updateOrder = async (req: Request , res : Response) =>{
             return;
         }
 
-        const files = req.files as UpdateMulterFiles;
-        const invoiceUploadedFiles = files.invoiceUploaded || [];
-        const fileUploadedFiles = files.fileUploaded || [];
 
-        const invoiceUploadedPaths = await Promise.all(
-            invoiceUploadedFiles.map(file => uploadFile(file, 'invoicesUploaded'))
-        );
+        let updatedData: any = { orderStatus };
 
-        const fileUploadedPaths = await Promise.all(
-            fileUploadedFiles.map(file => uploadFile(file, 'lawyerfiles'))
-        );
+        if (newCommentStatus) {
+            updatedData.commentStatusCycle = [
+                ...(existingOrder.commentStatusCycle || []),
+                newCommentStatus
+            ];
+        }
 
-        const updatedInvoiceUploaded = [
-            ...existingOrder.invoiceUploaded,
-            ...invoiceUploadedPaths
-        ];
+        if (req.files) {
+            const files = req.files as UpdateMulterFiles;
+            const invoiceUploadedFiles = files.invoiceUploaded || [];
+            const fileUploadedFiles = files.fileUploaded || [];
 
-        const updatedFileUploaded = [
-            ...existingOrder.fileUploaded,
-            ...fileUploadedPaths
-        ];
+            if (invoiceUploadedFiles.length > 0) {
+                const invoiceUploadedPaths = await Promise.all(
+                    invoiceUploadedFiles.map(file => uploadFile(file, 'invoicesUploaded'))
+                );
+                updatedData.invoiceUploaded = [
+                    ...(existingOrder.invoiceUploaded || []),
+                    ...invoiceUploadedPaths
+                ];
+            }
 
-        const updatedCommentStatusCycle = [
-            ...existingOrder.commentStatusCycle,
-            ...(newCommentStatus ? [newCommentStatus] : [])
-        ];
+            if (fileUploadedFiles.length > 0) {
+                const fileUploadedPaths = await Promise.all(
+                    fileUploadedFiles.map(file => uploadFile(file, 'lawyerfiles'))
+                );
+                updatedData.fileUploaded = [
+                    ...(existingOrder.fileUploaded || []),
+                    ...fileUploadedPaths
+                ];
+            }
+        }
+        if (nextActionLawyer) updatedData.nextActionLawyer = nextActionLawyer;
+        if (govtAppNumber) updatedData.govtAppNumber = govtAppNumber;
+        if (dateOfFilling) updatedData.dateOfFilling = dateOfFilling;
+        if (lawyerReferenceNumber2) updatedData.lawyerReferenceNumber = lawyerReferenceNumber2;
+        if (inmNumber) updatedData.inmNumber = inmNumber;
+
+        console.log("Updated fields prepared:", updatedData);
 
         const order = await prisma.order.update({
             where: {
                 id: id,
-                firmId : firmId
+                firmId: firmId
             },
-            data: {
-                orderStatus,
-                commentStatusCycle: updatedCommentStatusCycle,
-                invoiceUploaded: updatedInvoiceUploaded,
-                fileUploaded: updatedFileUploaded,
-                nextActionLawyer,
-                govtAppNumber,
-                dateOfFilling,
-                lawyerRefrenceNumber,
-                inmNumber
-            }
+            data: updatedData
         });
 
+        console.log("Order updated:", order);
         res.status(200).json({
             message: "Order updated",
             order
         });
-            
-    } catch (error) {
-        res.status(400).json({
-            message: "cant update order"
-        })
-    }
-    
 
-}
+    } catch (error) {
+        console.error("Error updating order:", error);
+        res.status(400).json({
+            message: "Can't update order"
+        });
+    }
+};
 
 export const downloadFile = async (req : Request , res : Response)=>{
     try {

@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { login , signup , createUser , createContractor , createOrder ,updateOrder ,getUsers, downloadFile , getContractor , getOrder, getFile} from '../controller/adminController'
+import { login , signup , createUser , createContractor , createOrder ,updateOrder ,getUsers, downloadFile , getContractor , getOrder, getFile, forgetPassword, resetPassword} from '../controller/adminController'
 import asyncHandler from 'express-async-handler'
 import { adminAuthMiddleware } from "../middleware/adminAuthMiddleware"
 import { upload } from "../config/multerConfig"
@@ -10,6 +10,8 @@ const adminRoutes = Router()
 
 adminRoutes.post('/login', login);
 adminRoutes.post('/signup', signup);
+adminRoutes.post('/forget-password', forgetPassword);
+adminRoutes.post('/reset-password/:id/:token', resetPassword);
 adminRoutes.post('/create-user', adminAuthMiddleware, createUser);
 adminRoutes.post('/create-contractor',adminAuthMiddleware, createContractor);
 adminRoutes.post('/create-order',adminAuthMiddleware, createOrder);

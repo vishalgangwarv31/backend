@@ -6,6 +6,8 @@ const firmAuthMiddleware_1 = require("../middleware/firmAuthMiddleware");
 const multerConfig_1 = require("../config/multerConfig");
 const firmRouter = (0, express_1.Router)();
 firmRouter.post('/login', firmController_1.login);
+firmRouter.post('/forget-password', firmController_1.forgetPassword);
+firmRouter.post('/reset-password/:id/:token', firmController_1.resetPassword);
 firmRouter.post('/update-firm', firmAuthMiddleware_1.firmAuthMiddleware, multerConfig_1.upload.fields([
     { name: 'agreementFile' },
     { name: 'ndaFile' }

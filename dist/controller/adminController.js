@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOrder = exports.getFile = exports.getContractor = exports.downloadFile = exports.getUsers = exports.updateOrder = exports.createOrder = exports.createContractor = exports.createUser = exports.signup = exports.login = void 0;
+exports.getOrder = exports.getFile = exports.getContractor = exports.downloadFile = exports.getUsers = exports.updateOrder = exports.createOrder = exports.createContractor = exports.createUser = exports.resetPassword = exports.forgetPassword = exports.signup = exports.login = void 0;
 const client_1 = __importDefault(require("../prisma/client"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = require("jsonwebtoken");
@@ -21,7 +21,9 @@ const uploadFile_1 = require("../utils/uploadFile");
 const multer_1 = __importDefault(require("multer"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const nodemailer_1 = __importDefault(require("nodemailer"));
 dotenv_1.default.config();
+const APP_PASSWORD = process.env.APP_PASSWORD;
 const JWT_SECRET = process.env.ADMIN_AUTH_JWT;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -81,6 +83,88 @@ const signup = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.signup = signup;
+const forgetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { email } = req.body;
+        const oldUser = yield client_1.default.admin.findUnique({
+            where: { email: email }
+        });
+        if (!oldUser) {
+            res.sendStatus(200).json({ message: "admin doesnt exist" });
+            return;
+        }
+        const secert = JWT_SECRET + oldUser.password;
+        const token = (0, jsonwebtoken_1.sign)({ email: oldUser.email, id: oldUser.id }, secert, { expiresIn: "10m" });
+        const link = `http://localhost:5174/api/admin/reset-password/${oldUser.id}/${token}`;
+        const transporter = nodemailer_1.default.createTransport({
+            service: 'gmail',
+            auth: {
+                user: 'vishalgangwar8696@gmail.com',
+                pass: `${APP_PASSWORD}`
+            }
+        });
+        const mailOptions = {
+            from: 'youremail@gmail.com',
+            to: 'g.vishal.8696@gmail.com',
+            subject: 'Reset Password (valid for 10 mins)',
+            text: `click on the link below to change your admin password ${link}`
+        };
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.log(error);
+            }
+            else {
+                console.log('Email sent');
+            }
+        });
+        res.status(200).json({
+            message: "reset link is sent to your mail"
+        });
+    }
+    catch (error) {
+        res.status(404).json({ message: "cant update password now" });
+    }
+});
+exports.forgetPassword = forgetPassword;
+const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const id = parseInt(req.params.id);
+    const token = req.params.token;
+    const password = req.body.password;
+    const oldUser = yield client_1.default.admin.findUnique({
+        where: { id: id }
+    });
+    if (!oldUser) {
+        res.json({
+            message: "firm doesn't exist"
+        });
+        return;
+    }
+    const secret = JWT_SECRET + (oldUser === null || oldUser === void 0 ? void 0 : oldUser.password);
+    try {
+        const check = (0, jsonwebtoken_1.verify)(token, secret);
+        const hashedPassword = yield bcrypt_1.default.hash(password, 10);
+        // console.log(hashedPassword);
+        console.log("aaaa");
+        const newUser = yield client_1.default.admin.update({
+            where: { id: id },
+            data: {
+                password: hashedPassword
+            }
+        });
+        console.log("aaaa");
+        console.log(newUser);
+        res.json({
+            message: "password changed"
+        });
+        return;
+    }
+    catch (error) {
+        res.json({
+            message: "something went wrong"
+        });
+    }
+});
+exports.resetPassword = resetPassword;
 const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { name, email, password } = req.body;
     const existedUser = client_1.default.user.findUnique({
@@ -337,7 +421,6 @@ const getOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             res.status(404).json({ message: "Order not found" });
             return;
         }
-        // Function to generate file links
         const generateFileLinks = (files, folder) => {
             return files.map(file => ({
                 filename: path_1.default.basename(file),

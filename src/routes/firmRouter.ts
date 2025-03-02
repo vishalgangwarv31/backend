@@ -1,11 +1,13 @@
 import { Router } from "express";
-import { login, orders, updateFirm , getFirm, updateOrder , downloadFile } from "../controller/firmController";
+import { login, orders, updateFirm , getFirm, updateOrder , downloadFile, forgetPassword, resetPassword } from "../controller/firmController";
 import { firmAuthMiddleware } from "../middleware/firmAuthMiddleware";
 import { upload } from "../config/multerConfig";
 
 const firmRouter = Router();
 
 firmRouter.post('/login',login);
+firmRouter.post('/forget-password', forgetPassword);
+firmRouter.post('/reset-password/:id/:token', resetPassword);
 firmRouter.post('/update-firm',firmAuthMiddleware, upload.fields([
     { name: 'agreementFile' },
     { name: 'ndaFile' }

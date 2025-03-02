@@ -1,16 +1,18 @@
 import { Request, response, Response } from "express"
 import prisma from "../prisma/client";
 import bcrypt from 'bcrypt';
-import jwt , { sign } from "jsonwebtoken";
+import jwt , { sign, verify } from "jsonwebtoken";
 import dotenv from "dotenv";
 import { IGetUserAuthInfoRequest } from "../config/definationFile";
 import { getPublicUrl } from "../utils/uploadFile";
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
+import nodemailer from 'nodemailer'
 
 
 dotenv.config();
+const APP_PASSWORD = process.env.APP_PASSWORD as string;
 const JWT_SECRET = process.env.ADMIN_AUTH_JWT as string;
 
 
@@ -86,6 +88,98 @@ export const signup = async (req: Request, res: Response) : Promise<void> => {
         res.status(400).json({ error: "Invalid input fields" });
     }
 };
+
+export const forgetPassword = async( req : Request , res : Response): Promise<void> =>{
+    try {
+        const {email} = req.body;
+        const oldUser = await prisma.admin.findUnique({
+            where : {email : email}
+        })
+
+        if(!oldUser){
+            res.sendStatus(200).json({message : "admin doesnt exist"})
+            return;
+        }
+
+        const secert = JWT_SECRET + oldUser.password;
+        const token = sign({email: oldUser.email, id : oldUser.id},secert, {expiresIn : "10m"});
+        const link =  `http://localhost:5174/api/admin/reset-password/${oldUser.id}/${token}`;
+
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+              user: 'vishalgangwar8696@gmail.com',
+              pass: `${APP_PASSWORD}`
+            }
+          });
+          
+          const mailOptions = {
+            from: 'youremail@gmail.com',
+            to: 'g.vishal.8696@gmail.com',
+            subject: 'Reset Password (valid for 10 mins)',
+            text: `click on the link below to change your admin password ${link}`
+          };
+          
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.log(error);
+            } else {
+              console.log('Email sent');
+            }
+          });
+          
+        res.status(200).json({
+            message : "reset link is sent to your mail"
+        })
+    } catch (error) {
+        res.status(404).json({message : "cant update password now"})
+    }
+}
+
+export const resetPassword = async (req : Request , res : Response) : Promise<void>=>{
+        const id = parseInt(req.params.id);
+        const token = req.params.token;
+        const password = req.body.password;
+
+        const oldUser = await prisma.admin.findUnique({
+            where: { id: id }
+        });
+
+        if (!oldUser) {
+            res.json({
+                message: "firm doesn't exist"
+            });
+            return;
+        }
+
+        const secret = JWT_SECRET + oldUser?.password;
+
+        try {
+            const check = verify(token, secret);
+            const hashedPassword = await bcrypt.hash(password, 10);
+            // console.log(hashedPassword);
+            console.log("aaaa")
+
+            const newUser = await prisma.admin.update({
+                where: { id: id },
+                data: {
+                    password: hashedPassword
+                }
+            });
+            console.log("aaaa")
+            console.log(newUser);
+
+            res.json({
+                message: "password changed"
+            });
+            return;
+        } catch (error) {
+            res.json({
+                message: "something went wrong"
+            });
+        }
+}
 
 export const createUser = async (req: Request, res: Response) => {
     const { name , email , password } = req.body;
@@ -309,7 +403,7 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
   };
   
   // Helper function to upload files
-  const uploadFile = (file: Express.Multer.File, folder: string): Promise<string> => {
+const uploadFile = (file: Express.Multer.File, folder: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const uploadPath = path.join(__dirname, 'uploads', folder);
       if (!fs.existsSync(uploadPath)) {
@@ -324,7 +418,7 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
         }
       });
     });
-  };
+};
   
 export const getUsers = async (req : Request , res : Response) =>{
     try {
@@ -395,7 +489,6 @@ export const getFile = (req: Request, res: Response): void => {
         return;
       }
   
-      // Function to generate file links
       const generateFileLinks = (files: string[], folder: string) => {
         return files.map(file => ({
           filename: path.basename(file),
