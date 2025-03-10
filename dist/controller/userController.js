@@ -143,14 +143,14 @@ const getUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             return;
         }
         const files = {
-            panCard: user.panCard ? yield (0, uploadFile_1.getPublicUrl)(user.panCard) : null,
-            tdsFile: user.tdsFile ? yield (0, uploadFile_1.getPublicUrl)(user.tdsFile) : null,
-            gstFile: user.gstFile ? yield (0, uploadFile_1.getPublicUrl)(user.gstFile) : null,
-            ndaFile: user.ndaFile ? yield (0, uploadFile_1.getPublicUrl)(user.ndaFile) : null,
-            dpiitFile: user.dpiitFile ? yield (0, uploadFile_1.getPublicUrl)(user.dpiitFile) : null,
-            agreementFile: user.agreementFile ? yield (0, uploadFile_1.getPublicUrl)(user.agreementFile) : null,
-            qunatifoFile: user.qunatifoFile ? yield (0, uploadFile_1.getPublicUrl)(user.qunatifoFile) : null,
-            udhyanFile: user.udhyanFile ? yield (0, uploadFile_1.getPublicUrl)(user.udhyanFile) : null
+        // panCard: user.panCard ? await getPublicUrl(user.panCard as string) : null,
+        // tdsFile: user.tdsFile ? await getPublicUrl(user.tdsFile as string) : null,
+        // gstFile: user.gstFile ? await getPublicUrl(user.gstFile as string ) : null,
+        // ndaFile: user.ndaFile ? await getPublicUrl(user.ndaFile as string) : null,
+        // dpiitFile: user.dpiitFile ? await getPublicUrl(user.dpiitFile as string) : null,
+        // agreementFile: user.agreementFile ?await getPublicUrl(user.agreementFile as string) : null,
+        // qunatifoFile: user.qunatifoFile ?await getPublicUrl(user.qunatifoFile as string) : null,
+        // udhyanFile: user.udhyanFile ?await getPublicUrl(user.udhyanFile as string) : null
         };
         res.status(200).json({
             user,
@@ -266,14 +266,14 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 pocName: pocName,
                 dpiit: dpiitBool,
                 dpiitDate: parsedDpiitDate,
-                panCard: panCardPath,
-                tdsFile: tdsFilePath,
-                gstFile: gstFilePath,
-                ndaFile: ndaFilePath,
-                dpiitFile: dpiitFilePath,
-                agreementFile: agreementFilePath,
-                qunatifoFile: qunatifoFilePath,
-                udhyanFile: udhyanFilePath
+                // panCard: panCardPath,
+                // tdsFile: tdsFilePath,
+                // gstFile: gstFilePath,
+                // ndaFile: ndaFilePath,
+                // dpiitFile: dpiitFilePath,
+                // agreementFile: agreementFilePath,
+                // qunatifoFile: qunatifoFilePath,
+                // udhyanFile: udhyanFilePath
             }
         });
         res.status(200).json({

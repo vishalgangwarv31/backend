@@ -12,14 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.order = exports.getOrder = exports.getFile = exports.getContractor = exports.downloadFile = exports.getUsers = exports.updateOrder = exports.createOrder = exports.createContractor = exports.createUser = exports.resetPassword = exports.forgetPassword = exports.signup = exports.login = void 0;
+exports.userById = exports.getOrders = exports.getOrderById = exports.getContractor = exports.getUsers = exports.getOrdersByFirm = exports.updateOrder = exports.createOrder = exports.getAllFirms = exports.getContractorById = exports.updateFirm = exports.createContractor = exports.updateUser = exports.getAllUsers = exports.createUser = exports.resetPassword = exports.forgetPassword = exports.signup = exports.login = void 0;
 const client_1 = __importDefault(require("../prisma/client"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = require("jsonwebtoken");
 const dotenv_1 = __importDefault(require("dotenv"));
 const uploadFile_1 = require("../utils/uploadFile");
 const multer_1 = __importDefault(require("multer"));
-const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const nodemailer_1 = __importDefault(require("nodemailer"));
 dotenv_1.default.config();
@@ -166,103 +165,352 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.resetPassword = resetPassword;
 const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, email, password } = req.body;
-    const existedUser = client_1.default.user.findUnique({
-        where: email
+    const { name, email, password, type, pocPhone, pocName, gstNumber, dpiit, dpiitDate } = req.body;
+    // console.log(dpiitDate)
+    const dpiit2 = (dpiit == "true") ? true : false;
+    const files = req.files;
+    const uploadFiles = (files, folder) => __awaiter(void 0, void 0, void 0, function* () {
+        return yield Promise.all(files.map(file => (0, uploadFile_1.uploadFile)(file, folder)));
     });
-    if (!existedUser) {
-        res.json({
-            message: "custumer is already exist"
+    const tdsFilePaths = files.tdsFile ? yield uploadFiles(files.tdsFile, 'tdsFiles') : [];
+    const gstFilePaths = files.gstFile ? yield uploadFiles(files.gstFile, 'gstFiles') : [];
+    const ndaFilePaths = files.ndaFile ? yield uploadFiles(files.ndaFile, 'ndaFiles') : [];
+    const dpiitFilePaths = files.dpiitFile ? yield uploadFiles(files.dpiitFile, 'dpiitFiles') : [];
+    const agreementFilePaths = files.agreementFile ? yield uploadFiles(files.agreementFile, 'agreementFiles') : [];
+    const qunatifoFilePaths = files.qunatifoFile ? yield uploadFiles(files.qunatifoFile, 'qunatifoFiles') : [];
+    const panCardPaths = files.panCard ? yield uploadFiles(files.panCard, 'panCards') : [];
+    const udhyanFilePaths = files.udhyanFile ? yield uploadFiles(files.udhyanFile, 'udhyanFiles') : [];
+    const existedUser = yield client_1.default.user.findUnique({
+        where: { email }
+    });
+    if (existedUser) {
+        res.status(400).json({
+            message: "Customer already exists"
         });
         return;
     }
-    // // console.log(req.user);
-    // const user = (req as IGetUserAuthInfoRequest).user;
-    // console.log(user.id);
-    // console.log(user.email);
-    // console.log("Sdfs");
     const hashedPassword = yield bcrypt_1.default.hash(password, 10);
     try {
         const newUser = yield client_1.default.user.create({
             data: {
-                name: name,
+                name,
                 email,
                 password: hashedPassword,
+                type,
+                pocPhone,
+                pocName,
+                gstNumber,
+                dpiit: dpiit2,
+                dpiitDate,
+                tdsFile: tdsFilePaths,
+                gstFile: gstFilePaths,
+                ndaFile: ndaFilePaths,
+                dpiitFile: dpiitFilePaths,
+                agreementFile: agreementFilePaths,
+                qunatifoFile: qunatifoFilePaths,
+                panCard: panCardPaths,
+                udhyanFile: udhyanFilePaths
             }
         });
         res.status(200).json({
             newUser,
-            message: "user created"
+            message: "User created"
         });
     }
     catch (e) {
         console.log(e);
         res.status(400).json({
-            message: "something went wronng, cant create a user"
+            message: "Something went wrong, can't create a user"
         });
     }
 });
 exports.createUser = createUser;
-const createContractor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, email, password } = req.body;
-    const existedFirm = client_1.default.firm.findUnique({
-        where: email
-    });
-    if (!existedFirm) {
-        res.json({
-            message: "Firm is already exist"
-        });
-        return;
-    }
-    const hashedPassword = yield bcrypt_1.default.hash(password, 10);
+const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const newUser = yield client_1.default.firm.create({
-            data: {
-                name: name,
-                email,
-                password: hashedPassword,
+        const users = yield client_1.default.user.findMany({
+            select: {
+                id: true,
+                name: true,
+                email: true
             }
         });
         res.status(200).json({
-            newUser,
-            message: "firm created"
+            message: "All users",
+            data: users
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "Cannot get users at the moment"
+        });
+    }
+});
+exports.getAllUsers = getAllUsers;
+const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = parseInt(req.params.id);
+    const { name, email, password, type, pocPhone, pocName, gstNumber, dpiit, dpiitDate } = req.body;
+    const dpiit2 = (dpiit === "true") ? true : false;
+    const files = req.files;
+    const uploadFiles = (files, folder) => __awaiter(void 0, void 0, void 0, function* () {
+        return yield Promise.all(files.map(file => (0, uploadFile_1.uploadFile)(file, folder)));
+    });
+    const tdsFilePaths = files.tdsFile ? yield uploadFiles(files.tdsFile, 'tdsFiles') : [];
+    const gstFilePaths = files.gstFile ? yield uploadFiles(files.gstFile, 'gstFiles') : [];
+    const ndaFilePaths = files.ndaFile ? yield uploadFiles(files.ndaFile, 'ndaFiles') : [];
+    const dpiitFilePaths = files.dpiitFile ? yield uploadFiles(files.dpiitFile, 'dpiitFiles') : [];
+    const agreementFilePaths = files.agreementFile ? yield uploadFiles(files.agreementFile, 'agreementFiles') : [];
+    const qunatifoFilePaths = files.qunatifoFile ? yield uploadFiles(files.qunatifoFile, 'qunatifoFiles') : [];
+    const panCardPaths = files.panCard ? yield uploadFiles(files.panCard, 'panCards') : [];
+    const udhyanFilePaths = files.udhyanFile ? yield uploadFiles(files.udhyanFile, 'udhyanFiles') : [];
+    const existingUser = yield client_1.default.user.findUnique({
+        where: { id: userId }
+    });
+    if (!existingUser) {
+        res.status(404).json({
+            message: "User not found"
+        });
+        return;
+    }
+    const hashedPassword = password ? yield bcrypt_1.default.hash(password, 10) : undefined;
+    try {
+        const updatedUser = yield client_1.default.user.update({
+            where: { id: userId },
+            data: {
+                name,
+                email,
+                password: hashedPassword,
+                type,
+                pocPhone,
+                pocName,
+                gstNumber,
+                dpiit: dpiit2,
+                dpiitDate,
+                tdsFile: [...existingUser.tdsFile, ...tdsFilePaths],
+                gstFile: [...existingUser.gstFile, ...gstFilePaths],
+                ndaFile: [...existingUser.ndaFile, ...ndaFilePaths],
+                dpiitFile: [...existingUser.dpiitFile, ...dpiitFilePaths],
+                agreementFile: [...existingUser.agreementFile, ...agreementFilePaths],
+                qunatifoFile: [...existingUser.qunatifoFile, ...qunatifoFilePaths],
+                panCard: [...existingUser.panCard, ...panCardPaths],
+                udhyanFile: [...existingUser.udhyanFile, ...udhyanFilePaths]
+            }
+        });
+        res.status(200).json({
+            updatedUser,
+            message: "User updated"
         });
     }
     catch (e) {
         console.log(e);
         res.status(400).json({
-            message: "something went wronng, cant create a firm"
+            message: "Something went wrong, can't update the user"
+        });
+    }
+});
+exports.updateUser = updateUser;
+const createContractor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { name, email, password, workType, startup } = req.body;
+    const startup2 = (startup == "true") ? true : false;
+    try {
+        const files = req.files;
+        const uploadFiles = (files, folder) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield Promise.all(files.map(file => (0, uploadFile_1.uploadFile)(file, folder)));
+        });
+        const agreementFilePaths = files.agreementFile ? yield uploadFiles(files.agreementFile, 'agreementFiles') : [];
+        const ndaFilePaths = files.ndaFile ? yield uploadFiles(files.ndaFile, 'ndaFiles') : [];
+        const otherFilePaths = files.other ? yield uploadFiles(files.other, 'otherFiles') : [];
+        const existedFirm = yield client_1.default.firm.findUnique({
+            where: { email }
+        });
+        if (existedFirm) {
+            res.status(400).json({
+                message: "Firm already exists"
+            });
+            return;
+        }
+        const hashedPassword = yield bcrypt_1.default.hash(password, 10);
+        const newFirm = yield client_1.default.firm.create({
+            data: {
+                name,
+                email,
+                password: hashedPassword,
+                workType,
+                startup: startup2,
+                agreementFile: agreementFilePaths.length > 0 ? agreementFilePaths[0] : undefined,
+                ndaFile: ndaFilePaths.length > 0 ? ndaFilePaths[0] : undefined,
+                other: otherFilePaths.length > 0 ? otherFilePaths[0] : undefined
+            }
+        });
+        res.status(200).json({
+            newFirm,
+            message: "Firm created"
+        });
+    }
+    catch (e) {
+        console.log(e);
+        res.status(400).json({
+            message: "Something went wrong, can't create a firm"
         });
     }
 });
 exports.createContractor = createContractor;
-const createOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { userId, firmId } = req.body;
+const updateFirm = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const newOrder = yield client_1.default.order.create({
+        const firmId = parseInt(req.params.id);
+        const { name, email, workType, startup, agreementFile, ndaFile, other } = req.body;
+        const existingFirm = yield client_1.default.firm.findUnique({
+            where: { id: firmId }
+        });
+        if (!existingFirm) {
+            res.status(404).json({ message: "Firm not found" });
+            return;
+        }
+        const files = req.files;
+        const agreementFileFiles = files.agreementFile || [];
+        const ndaFileFiles = files.ndaFile || [];
+        const otherFiles = files.other || [];
+        const agreementFilePaths = yield Promise.all(agreementFileFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'agreementFiles')));
+        const ndaFilePaths = yield Promise.all(ndaFileFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'ndaFiles')));
+        const otherFilePaths = yield Promise.all(otherFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'otherFiles')));
+        const updatedFirm = yield client_1.default.firm.update({
+            where: {
+                id: firmId
+            },
             data: {
-                userId,
-                firmId
+                name,
+                email,
+                workType,
+                startup,
+                agreementFile: agreementFilePaths.length ? agreementFilePaths[0] : existingFirm.agreementFile,
+                ndaFile: ndaFilePaths.length ? ndaFilePaths[0] : existingFirm.ndaFile,
+                other: otherFilePaths.length ? otherFilePaths[0] : existingFirm.other
+            }
+        });
+        const agreementFileUrl = updatedFirm.agreementFile ? yield (0, uploadFile_1.getPublicUrl)(updatedFirm.agreementFile) : null;
+        const ndaFileUrl = updatedFirm.ndaFile ? yield (0, uploadFile_1.getPublicUrl)(updatedFirm.ndaFile) : null;
+        const otherFileUrl = updatedFirm.other ? yield (0, uploadFile_1.getPublicUrl)(updatedFirm.other) : null;
+        res.status(200).json({
+            message: "Firm updated successfully",
+            firm: Object.assign(Object.assign({}, updatedFirm), { agreementFile: agreementFileUrl, ndaFile: ndaFileUrl, other: otherFileUrl })
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(401).json({
+            message: "Can't update your firm, something went wrong"
+        });
+    }
+});
+exports.updateFirm = updateFirm;
+const getContractorById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const contractorId = parseInt(req.params.id);
+        const contractor = yield client_1.default.firm.findUnique({
+            where: { id: contractorId }
+        });
+        if (!contractor) {
+            res.status(404).json({ message: "Contractor not found" });
+            return;
+        }
+        const agreementFileUrl = contractor.agreementFile ? yield (0, uploadFile_1.getPublicUrl)(contractor.agreementFile) : null;
+        const ndaFileUrl = contractor.ndaFile ? yield (0, uploadFile_1.getPublicUrl)(contractor.ndaFile) : null;
+        const otherFileUrl = contractor.other ? yield (0, uploadFile_1.getPublicUrl)(contractor.other) : null;
+        res.status(200).json({
+            message: "Contractor found",
+            contractor: Object.assign(Object.assign({}, contractor), { agreementFile: agreementFileUrl, ndaFile: ndaFileUrl, other: otherFileUrl })
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "An error occurred while fetching the contractor"
+        });
+    }
+});
+exports.getContractorById = getContractorById;
+const getAllFirms = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const firms = yield client_1.default.firm.findMany({
+            select: {
+                id: true,
+                name: true,
+                email: true
             }
         });
         res.status(200).json({
-            message: "new order is created",
+            message: "All firms",
+            data: firms
+        });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "Cannot get firms at the moment"
+        });
+    }
+});
+exports.getAllFirms = getAllFirms;
+const createOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { userId, firmId, dateOfOrder, typeOfOrder, payementExpected, amountCharged, amountPaid, orderStatus, commentStatusCycle, dateOdExpectation, nextActionLawyer, nextActionClient, govtAppNumber, dateOfFilling, lawyerRefrenceNumber, inmNumber, orderCompleteDate } = req.body;
+    const userId2 = parseInt(userId);
+    const firmId2 = parseInt(firmId);
+    const amountCharged2 = parseInt(amountCharged);
+    const amountPaid2 = parseInt(amountPaid);
+    const commentStatusCycleArray = Array.isArray(commentStatusCycle) ? commentStatusCycle : [commentStatusCycle];
+    const govtAppNumber2 = parseInt(govtAppNumber);
+    const lawyerRefrenceNumber2 = parseInt(lawyerRefrenceNumber);
+    try {
+        const files = req.files;
+        const documentProvidedFiles = files.documentProvided || [];
+        const invoiceUploadedFiles = files.invoiceUploaded || [];
+        const fileUploadedFiles = files.fileUploaded || [];
+        const documentProvidedPaths = yield Promise.all(documentProvidedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'documentsProvided')));
+        const invoiceUploadedPaths = yield Promise.all(invoiceUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'invoicesUploaded')));
+        const fileUploadedPaths = yield Promise.all(fileUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'lawyerFiles')));
+        const newOrder = yield client_1.default.order.create({
+            data: {
+                userId: userId2,
+                firmId: firmId2,
+                dateOfOrder,
+                typeOfOrder,
+                payementExpected,
+                amountCharged: amountCharged2,
+                amountPaid: amountPaid2,
+                orderStatus,
+                commentStatusCycle: commentStatusCycleArray,
+                dateOdExpectation,
+                documentProvided: documentProvidedPaths,
+                invoiceUploaded: invoiceUploadedPaths,
+                fileUploaded: fileUploadedPaths,
+                nextActionLawyer,
+                nextActionClient,
+                govtAppNumber: govtAppNumber2,
+                dateOfFilling,
+                lawyerRefrenceNumber: lawyerRefrenceNumber2,
+                inmNumber,
+                orderCompleteDate
+            }
+        });
+        res.status(200).json({
+            message: "New order is created",
             newOrder
         });
     }
     catch (error) {
         console.log(error);
         res.status(400).json({
-            message: "cant create order"
+            message: "Can't create order"
         });
     }
 });
 exports.createOrder = createOrder;
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({ storage });
+// updated
 const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const orderId = parseInt(req.body.id);
+        const orderId = parseInt(req.params.id);
         const { dateOfOrder, typeOfOrder, payementExpected, amountCharged, amountPaid, orderStatus, newCommentStatus, dateOdExpectation, nextActionLawyer, nextActionClient, govtAppNumber, dateOfFilling, lawyerRefrenceNumber, inmNumber, orderCompleteDate } = req.body;
         const amountCharged2 = parseInt(amountCharged);
         const amountPaid2 = parseInt(amountPaid);
@@ -279,9 +527,9 @@ const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         const documentProvidedFiles = files.documentProvided || [];
         const invoiceUploadedFiles = files.invoiceUploaded || [];
         const fileUploadedFiles = files.fileUploaded || [];
-        const documentProvidedPaths = yield Promise.all(documentProvidedFiles.map(file => uploadFile(file, 'documentsProvided')));
-        const invoiceUploadedPaths = yield Promise.all(invoiceUploadedFiles.map(file => uploadFile(file, 'invoicesUploaded')));
-        const fileUploadedPaths = yield Promise.all(fileUploadedFiles.map(file => uploadFile(file, 'lawyerfiles')));
+        const documentProvidedPaths = yield Promise.all(documentProvidedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'documentsProvided')));
+        const invoiceUploadedPaths = yield Promise.all(invoiceUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'invoicesUploaded')));
+        const fileUploadedPaths = yield Promise.all(fileUploadedFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'lawyerfiles')));
         const updatedCommentStatusCycle = [
             ...existingOrder.commentStatusCycle,
             ...(newCommentStatus ? [newCommentStatus] : [])
@@ -336,82 +584,126 @@ const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.updateOrder = updateOrder;
-// Helper function to upload files
-const uploadFile = (file, folder) => {
-    return new Promise((resolve, reject) => {
-        const uploadPath = path_1.default.join(__dirname, 'uploads', folder);
-        if (!fs_1.default.existsSync(uploadPath)) {
-            fs_1.default.mkdirSync(uploadPath, { recursive: true });
-        }
-        const filePath = path_1.default.join(uploadPath, `${Date.now()}-${file.originalname}`);
-        fs_1.default.writeFile(filePath, file.buffer, (err) => {
-            if (err) {
-                reject(err);
-            }
-            else {
-                resolve(filePath);
-            }
+const getOrdersByFirm = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { cursor, take } = req.query;
+    const takeNumber = parseInt(take) || 10;
+    const cursorObject = cursor ? { id: parseInt(cursor) } : undefined;
+    try {
+        const orders = yield client_1.default.order.findMany({
+            where: { firmId: parseInt(id) },
+            take: takeNumber,
+            skip: cursor ? 1 : 0,
+            cursor: cursorObject,
+            select: {
+                id: true,
+                dateOfOrder: true,
+                payementExpected: true,
+                user: {
+                    select: {
+                        name: true,
+                    },
+                },
+                firm: {
+                    select: {
+                        name: true,
+                    },
+                },
+            },
         });
-    });
-};
+        const nextCursor = orders.length === takeNumber ? orders[orders.length - 1].id : null;
+        res.status(200).json({
+            orders,
+            nextCursor,
+        });
+    }
+    catch (error) {
+        console.error('Error fetching orders:', error);
+        res.status(500).json({ message: 'Error fetching orders' });
+    }
+});
+exports.getOrdersByFirm = getOrdersByFirm;
+//updated
 const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const user = yield client_1.default.user.findMany();
+        const { cursor, limit = 15, name, email, includeInactive } = req.query;
+        const pageSize = parseInt(limit) || 15;
+        const whereClause = {};
+        if (name) {
+            whereClause.name = { contains: name, mode: "insensitive" };
+        }
+        if (email) {
+            whereClause.email = { contains: email, mode: "insensitive" };
+        }
+        if (includeInactive !== 'true') {
+            whereClause.isDeleted = false;
+        }
+        const users = yield client_1.default.user.findMany({
+            take: pageSize + 1,
+            skip: cursor ? 1 : 0,
+            cursor: cursor ? { id: parseInt(cursor) } : undefined,
+            where: Object.keys(whereClause).length ? whereClause : undefined,
+        });
+        const hasNextPage = users.length > pageSize;
+        if (hasNextPage)
+            users.pop();
+        const nextCursor = hasNextPage ? users[users.length - 1].id : null;
         res.status(200).json({
-            message: "all users ",
-            user
+            message: "all users",
+            data: users,
+            nextCursor,
         });
     }
     catch (error) {
         res.status(404).json({
-            message: "can get user at the moment"
+            message: "cannot get users at the moment",
         });
     }
 });
 exports.getUsers = getUsers;
-const downloadFile = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const path = req.body.path;
-        const downloadURL = yield (0, uploadFile_1.getPublicUrl)(path);
-        res.status(200).json({
-            message: "this is ur download link",
-            downloadURL
-        });
-    }
-    catch (error) {
-        res.json(404).json({
-            message: "cant download this now"
-        });
-    }
-});
-exports.downloadFile = downloadFile;
+// need to update
 const getContractor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const user = yield client_1.default.firm.findMany();
+        const { cursor, limit, name, email } = req.query;
+        const pageSize = parseInt(limit) || 10;
+        const whereClause = {};
+        if (name) {
+            whereClause.name = { contains: name, mode: "insensitive" };
+        }
+        if (email) {
+            whereClause.email = { contains: email, mode: "insensitive" };
+        }
+        const firms = yield client_1.default.firm.findMany({
+            take: pageSize + 1,
+            skip: cursor ? 1 : 0,
+            cursor: cursor ? { id: parseInt(cursor) } : undefined,
+            where: Object.keys(whereClause).length ? whereClause : undefined,
+        });
+        const hasNextPage = firms.length > pageSize;
+        if (hasNextPage)
+            firms.pop();
+        const firmsWithFileLinks = yield Promise.all(firms.map((firm) => __awaiter(void 0, void 0, void 0, function* () {
+            const agreementFileUrl = firm.agreementFile ? yield (0, uploadFile_1.getPublicUrl)(firm.agreementFile) : null;
+            const ndaFileUrl = firm.ndaFile ? yield (0, uploadFile_1.getPublicUrl)(firm.ndaFile) : null;
+            const otherFileUrl = firm.other ? yield (0, uploadFile_1.getPublicUrl)(firm.other) : null;
+            return Object.assign(Object.assign({}, firm), { agreementFile: agreementFileUrl, ndaFile: ndaFileUrl, other: otherFileUrl });
+        })));
         res.status(200).json({
-            message: "all firm",
-            user
+            message: "All firms",
+            firms: firmsWithFileLinks,
+            nextCursor: hasNextPage ? firms[firms.length - 1].id : null
         });
     }
     catch (error) {
+        console.log(error);
         res.status(404).json({
-            message: "can get user at the moment"
+            message: "Cannot get firms at the moment"
         });
     }
 });
 exports.getContractor = getContractor;
-const getFile = (req, res) => {
-    const { folder, filename } = req.params;
-    const filePath = path_1.default.join(__dirname, 'uploads', folder, filename);
-    if (fs_1.default.existsSync(filePath)) {
-        res.sendFile(filePath);
-    }
-    else {
-        res.status(404).json({ message: "File not found" });
-    }
-};
-exports.getFile = getFile;
-const getOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+//this is to get whole order (updated)
+const getOrderById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const orderId = parseInt(req.params.id);
         const order = yield client_1.default.order.findUnique({
@@ -421,15 +713,19 @@ const getOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             res.status(404).json({ message: "Order not found" });
             return;
         }
-        const generateFileLinks = (files, folder) => {
-            return files.map(file => ({
-                filename: path_1.default.basename(file),
-                url: `${req.protocol}://${req.get('host')}/api/admin/file/${folder}/${path_1.default.basename(file)}`
-            }));
-        };
-        const documentProvidedLinks = generateFileLinks(order.documentProvided, 'documentsProvided');
-        const invoiceUploadedLinks = generateFileLinks(order.invoiceUploaded, 'invoicesUploaded');
-        const fileUploadedLinks = generateFileLinks(order.fileUploaded, 'lawyerfiles');
+        const generateFileLinks = (files, folder) => __awaiter(void 0, void 0, void 0, function* () {
+            const links = yield Promise.all(files.map((file) => __awaiter(void 0, void 0, void 0, function* () {
+                const publicUrl = yield (0, uploadFile_1.getPublicUrl)(`${folder}/${path_1.default.basename(file)}`);
+                return {
+                    filename: path_1.default.basename(file),
+                    url: publicUrl
+                };
+            })));
+            return links;
+        });
+        const documentProvidedLinks = yield generateFileLinks(order.documentProvided, 'documentsProvided');
+        const invoiceUploadedLinks = yield generateFileLinks(order.invoiceUploaded, 'invoicesUploaded');
+        const fileUploadedLinks = yield generateFileLinks(order.fileUploaded, 'lawyerfiles');
         res.status(200).json(Object.assign(Object.assign({}, order), { documentProvidedLinks,
             invoiceUploadedLinks,
             fileUploadedLinks }));
@@ -441,18 +737,68 @@ const getOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
     }
 });
-exports.getOrder = getOrder;
-const order = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.getOrderById = getOrderById;
+//this is to get list of order 10(updated)
+const getOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const data = yield client_1.default.order.findMany();
+        const { cursor, limit = 2, userId } = req.query;
+        const limitNumber = parseInt(limit);
+        const orders = yield client_1.default.order.findMany({
+            take: limitNumber,
+            skip: cursor ? 1 : 0,
+            cursor: cursor ? { id: parseInt(cursor) } : undefined,
+            where: userId ? { userId: parseInt(userId) } : undefined,
+            select: {
+                id: true,
+                dateOfOrder: true,
+                orderStatus: true,
+                firm: {
+                    select: {
+                        name: true
+                    }
+                },
+            }
+        });
+        if (orders.length === 0) {
+            res.status(200).json({ orders: [], nextCursor: null });
+            return;
+        }
+        const ordersWithLinks = orders.map(order => ({
+            id: order.id,
+            dateOfOrder: order.dateOfOrder,
+            orderStatus: order.orderStatus,
+            vendor: order.firm.name,
+        }));
+        const nextCursor = orders.length === limitNumber ? orders[orders.length - 1].id : null;
         res.status(200).json({
-            data
+            orders: ordersWithLinks,
+            nextCursor
         });
     }
     catch (error) {
-        res.status(400).json({
-            message: "can not get orders"
+        console.log(error);
+        res.status(500).json({
+            message: "Can't fetch the orders, something went wrong"
         });
     }
 });
-exports.order = order;
+exports.getOrders = getOrders;
+//updated
+const userById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const user = yield client_1.default.user.findUnique({
+            where: { id: parseInt(id) },
+        });
+        if (user) {
+            res.status(200).json({ user });
+        }
+        else {
+            res.status(404).json({ message: "User not found" });
+        }
+    }
+    catch (error) {
+        res.status(500).json({ message: "Cannot get user at the moment" });
+    }
+});
+exports.userById = userById;

@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import jwt , { sign, verify } from "jsonwebtoken";
 import dotenv from "dotenv";
 import { IGetUserAuthInfoRequest } from "../config/definationFile";
-import { getPublicUrl } from "../utils/uploadFile";
+import { getPublicUrl, uploadFile } from "../utils/uploadFile";
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -182,104 +182,459 @@ export const resetPassword = async (req : Request , res : Response) : Promise<vo
 }
 
 export const createUser = async (req: Request, res: Response) => {
-    const { name , email , password } = req.body;
+  const {
+    name,
+    email,
+    password,
+    type,
+    pocPhone,
+    pocName,
+    gstNumber,
+    dpiit,
+    dpiitDate
+  } = req.body;
 
-    const existedUser = prisma.user.findUnique({
-        where  : email
+  // console.log(dpiitDate)
+  const dpiit2 = (dpiit == "true") ? true : false;
+
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+  const uploadFiles = async (files: Express.Multer.File[], folder: string) => {
+    return await Promise.all(files.map(file => uploadFile(file, folder)));
+  };
+
+  const tdsFilePaths = files.tdsFile ? await uploadFiles(files.tdsFile, 'tdsFiles') : [];
+  const gstFilePaths = files.gstFile ? await uploadFiles(files.gstFile, 'gstFiles') : [];
+  const ndaFilePaths = files.ndaFile ? await uploadFiles(files.ndaFile, 'ndaFiles') : [];
+  const dpiitFilePaths = files.dpiitFile ? await uploadFiles(files.dpiitFile, 'dpiitFiles') : [];
+  const agreementFilePaths = files.agreementFile ? await uploadFiles(files.agreementFile, 'agreementFiles') : [];
+  const qunatifoFilePaths = files.qunatifoFile ? await uploadFiles(files.qunatifoFile, 'qunatifoFiles') : [];
+  const panCardPaths = files.panCard ? await uploadFiles(files.panCard, 'panCards') : [];
+  const udhyanFilePaths = files.udhyanFile ? await uploadFiles(files.udhyanFile, 'udhyanFiles') : [];
+
+  const existedUser = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  if (existedUser) {
+    res.status(400).json({
+      message: "Customer already exists"
+    });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  try {
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        type,
+        pocPhone,
+        pocName,
+        gstNumber,
+        dpiit : dpiit2,
+        dpiitDate,
+        tdsFile: tdsFilePaths,
+        gstFile: gstFilePaths,
+        ndaFile: ndaFilePaths,
+        dpiitFile: dpiitFilePaths,
+        agreementFile: agreementFilePaths,
+        qunatifoFile: qunatifoFilePaths,
+        panCard: panCardPaths,
+        udhyanFile: udhyanFilePaths
+      }
+    });
+    res.status(200).json({
+      newUser,
+      message: "User created"
+    });
+  } catch (e) {
+    console.log(e);
+    res.status(400).json({
+      message: "Something went wrong, can't create a user"
+    });
+  }
+};
+
+export const getAllUsers = async (req: Request, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id:true,
+        name: true,
+        email: true
+      }
     });
 
-    if(!existedUser) {
-        res.json({
-            message: "custumer is already exist"
-        })
-        return;
-    }
-    // // console.log(req.user);
-    // const user = (req as IGetUserAuthInfoRequest).user;
-    // console.log(user.id);
-    // console.log(user.email);
-    // console.log("Sdfs");
-
-    const hashedPassword = await bcrypt.hash(password,10);
-
-    try{
-        const newUser = await prisma.user.create({
-            data: {
-                name : name,
-                email,
-                password: hashedPassword,
-            }
-        });
-        res.status(200).json({
-            newUser,
-            message : "user created"
-        })
-    } catch(e){
-        console.log(e);
-        res.status(400).json({
-            message : "something went wronng, cant create a user"
-        })
-    }
+    res.status(200).json({
+      message: "All users",
+      data: users
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Cannot get users at the moment"
+    });
+  }
 };
+
+export const updateUser = async (req: Request, res: Response) => {
+  const userId = parseInt(req.params.id);
+  const {
+    name,
+    email,
+    password,
+    type,
+    pocPhone,
+    pocName,
+    gstNumber,
+    dpiit,
+    dpiitDate
+  } = req.body;
+
+  const dpiit2 = (dpiit === "true") ? true : false;
+
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+  const uploadFiles = async (files: Express.Multer.File[], folder: string) => {
+    return await Promise.all(files.map(file => uploadFile(file, folder)));
+  };
+
+  const tdsFilePaths = files.tdsFile ? await uploadFiles(files.tdsFile, 'tdsFiles') : [];
+  const gstFilePaths = files.gstFile ? await uploadFiles(files.gstFile, 'gstFiles') : [];
+  const ndaFilePaths = files.ndaFile ? await uploadFiles(files.ndaFile, 'ndaFiles') : [];
+  const dpiitFilePaths = files.dpiitFile ? await uploadFiles(files.dpiitFile, 'dpiitFiles') : [];
+  const agreementFilePaths = files.agreementFile ? await uploadFiles(files.agreementFile, 'agreementFiles') : [];
+  const qunatifoFilePaths = files.qunatifoFile ? await uploadFiles(files.qunatifoFile, 'qunatifoFiles') : [];
+  const panCardPaths = files.panCard ? await uploadFiles(files.panCard, 'panCards') : [];
+  const udhyanFilePaths = files.udhyanFile ? await uploadFiles(files.udhyanFile, 'udhyanFiles') : [];
+
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (!existingUser) {
+    res.status(404).json({
+      message: "User not found"
+    });
+    return;
+  }
+
+  const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined;
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        type,
+        pocPhone,
+        pocName,
+        gstNumber,
+        dpiit : dpiit2,
+        dpiitDate,
+        tdsFile: [...existingUser.tdsFile, ...tdsFilePaths],
+        gstFile: [...existingUser.gstFile, ...gstFilePaths],
+        ndaFile: [...existingUser.ndaFile, ...ndaFilePaths],
+        dpiitFile: [...existingUser.dpiitFile, ...dpiitFilePaths],
+        agreementFile: [...existingUser.agreementFile, ...agreementFilePaths],
+        qunatifoFile: [...existingUser.qunatifoFile, ...qunatifoFilePaths],
+        panCard: [...existingUser.panCard, ...panCardPaths],
+        udhyanFile: [...existingUser.udhyanFile, ...udhyanFilePaths]
+      }
+    });
+    res.status(200).json({
+      updatedUser,
+      message: "User updated"
+    });
+  } catch (e) {
+    console.log(e);
+    res.status(400).json({
+      message: "Something went wrong, can't update the user"
+    });
+  }
+};
+
 
 export const createContractor = async (req: Request, res: Response) => {
-    const { name , email , password } = req.body;
+  const {
+    name,
+    email,
+    password,
+    workType,
+    startup
+  } = req.body;
 
-    const existedFirm = prisma.firm.findUnique({
-        where  : email
+  const startup2 = (startup == "true") ? true : false;
+
+  try {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+    const uploadFiles = async (files: Express.Multer.File[], folder: string) => {
+      return await Promise.all(files.map(file => uploadFile(file, folder)));
+    };
+
+    const agreementFilePaths = files.agreementFile ? await uploadFiles(files.agreementFile, 'agreementFiles') : [];
+    const ndaFilePaths = files.ndaFile ? await uploadFiles(files.ndaFile, 'ndaFiles') : [];
+    const otherFilePaths = files.other ? await uploadFiles(files.other, 'otherFiles') : [];
+
+    const existedFirm = await prisma.firm.findUnique({
+      where: { email }
     });
 
-    if(!existedFirm) {
-        res.json({
-            message: "Firm is already exist"
-        })
-        return;
+    if (existedFirm) {
+      res.status(400).json({
+        message: "Firm already exists"
+      });
+      return;
     }
 
-    const hashedPassword = await bcrypt.hash(password,10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    try{
-        const newUser = await prisma.firm.create({
-            data: {
-                name : name,
-                email,
-                password: hashedPassword,
-            }
-        });
-        res.status(200).json({
-            newUser,
-            message : "firm created"
-        })
-    } catch(e){
-        console.log(e);
-        res.status(400).json({
-            message : "something went wronng, cant create a firm"
-        })
-    }    
+    const newFirm = await prisma.firm.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        workType,
+        startup: startup2,
+        agreementFile: agreementFilePaths.length > 0 ? agreementFilePaths[0] : undefined,
+        ndaFile: ndaFilePaths.length > 0 ? ndaFilePaths[0] : undefined,
+        other: otherFilePaths.length > 0 ? otherFilePaths[0] : undefined
+      }
+    });
+    res.status(200).json({
+      newFirm,
+      message: "Firm created"
+    });
+  } catch (e) {
+    console.log(e);
+    res.status(400).json({
+      message: "Something went wrong, can't create a firm"
+    });
+  }
 };
 
-export const createOrder = async (req : Request , res : Response) =>{
-    const { userId , firmId } = req.body;
+export const updateFirm = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const firmId = parseInt(req.params.id);
+    const {
+      name,
+      email,
+      workType,
+      startup,
+      agreementFile,
+      ndaFile,
+      other
+    } = req.body;
 
-    try {
-        const newOrder = await prisma.order.create({
-            data:{
-                userId,
-                firmId
-            }
-        })
-    
-        res.status(200).json({
-            message : "new order is created",
-            newOrder
-        })
-    } catch (error) {
-        console.log(error);
-        res.status(400).json({
-            message : "cant create order"
-        })
+    const existingFirm = await prisma.firm.findUnique({
+      where: { id: firmId }
+    });
+
+    if (!existingFirm) {
+      res.status(404).json({ message: "Firm not found" });
+      return;
     }
-}
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const agreementFileFiles = files.agreementFile || [];
+    const ndaFileFiles = files.ndaFile || [];
+    const otherFiles = files.other || [];
+
+    const agreementFilePaths = await Promise.all(
+      agreementFileFiles.map(file => uploadFile(file, 'agreementFiles'))
+    );
+
+    const ndaFilePaths = await Promise.all(
+      ndaFileFiles.map(file => uploadFile(file, 'ndaFiles'))
+    );
+
+    const otherFilePaths = await Promise.all(
+      otherFiles.map(file => uploadFile(file, 'otherFiles'))
+    );
+
+    const updatedFirm = await prisma.firm.update({
+      where: {
+        id: firmId
+      },
+      data: {
+        name,
+        email,
+        workType,
+        startup,
+        agreementFile: agreementFilePaths.length ? agreementFilePaths[0] : existingFirm.agreementFile,
+        ndaFile: ndaFilePaths.length ? ndaFilePaths[0] : existingFirm.ndaFile,
+        other: otherFilePaths.length ? otherFilePaths[0] : existingFirm.other
+      }
+    });
+
+    const agreementFileUrl = updatedFirm.agreementFile ? await getPublicUrl(updatedFirm.agreementFile) : null;
+    const ndaFileUrl = updatedFirm.ndaFile ? await getPublicUrl(updatedFirm.ndaFile) : null;
+    const otherFileUrl = updatedFirm.other ? await getPublicUrl(updatedFirm.other) : null;
+
+    res.status(200).json({
+      message: "Firm updated successfully",
+      firm: {
+        ...updatedFirm,
+        agreementFile: agreementFileUrl,
+        ndaFile: ndaFileUrl,
+        other: otherFileUrl
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(401).json({
+      message: "Can't update your firm, something went wrong"
+    });
+  }
+};
+
+export const getContractorById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contractorId = parseInt(req.params.id);
+
+    const contractor = await prisma.firm.findUnique({
+      where: { id: contractorId }
+    });
+
+    if (!contractor) {
+      res.status(404).json({ message: "Contractor not found" });
+      return;
+    }
+
+    const agreementFileUrl = contractor.agreementFile ? await getPublicUrl(contractor.agreementFile) : null;
+    const ndaFileUrl = contractor.ndaFile ? await getPublicUrl(contractor.ndaFile) : null;
+    const otherFileUrl = contractor.other ? await getPublicUrl(contractor.other) : null;
+
+    res.status(200).json({
+      message: "Contractor found",
+      contractor: {
+        ...contractor,
+        agreementFile: agreementFileUrl,
+        ndaFile: ndaFileUrl,
+        other: otherFileUrl
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "An error occurred while fetching the contractor"
+    });
+  }
+};
+
+export const getAllFirms = async (req: Request, res: Response) => {
+  try {
+    const firms = await prisma.firm.findMany({
+      select: {
+        id:true,
+        name: true,
+        email: true
+      }
+    });
+
+    res.status(200).json({
+      message: "All firms",
+      data: firms
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Cannot get firms at the moment"
+    });
+  }
+};
+
+export const createOrder = async (req: Request, res: Response) => {
+  const {
+    userId,
+    firmId,
+    dateOfOrder,
+    typeOfOrder,
+    payementExpected,
+    amountCharged,
+    amountPaid,
+    orderStatus,
+    commentStatusCycle,
+    dateOdExpectation,
+    nextActionLawyer,
+    nextActionClient,
+    govtAppNumber,
+    dateOfFilling,
+    lawyerRefrenceNumber,
+    inmNumber,
+    orderCompleteDate
+  } = req.body;
+
+  const userId2 = parseInt(userId);
+  const firmId2 = parseInt(firmId);
+  const amountCharged2 = parseInt(amountCharged);
+  const amountPaid2 = parseInt(amountPaid);
+  const commentStatusCycleArray = Array.isArray(commentStatusCycle) ? commentStatusCycle : [commentStatusCycle];
+  const govtAppNumber2 = parseInt(govtAppNumber);
+  const lawyerRefrenceNumber2 = parseInt(lawyerRefrenceNumber);
+
+  try {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const documentProvidedFiles = files.documentProvided || [];
+    const invoiceUploadedFiles = files.invoiceUploaded || [];
+    const fileUploadedFiles = files.fileUploaded || [];
+
+    const documentProvidedPaths = await Promise.all(
+      documentProvidedFiles.map(file => uploadFile(file, 'documentsProvided'))
+    );
+
+    const invoiceUploadedPaths = await Promise.all(
+      invoiceUploadedFiles.map(file => uploadFile(file, 'invoicesUploaded'))
+    );
+
+    const fileUploadedPaths = await Promise.all(
+      fileUploadedFiles.map(file => uploadFile(file, 'lawyerFiles'))
+    );
+
+    const newOrder = await prisma.order.create({
+      data: {
+        userId: userId2,
+        firmId: firmId2,
+        dateOfOrder,
+        typeOfOrder,
+        payementExpected,
+        amountCharged: amountCharged2,
+        amountPaid: amountPaid2,
+        orderStatus,
+        commentStatusCycle: commentStatusCycleArray,
+        dateOdExpectation,
+        documentProvided: documentProvidedPaths,
+        invoiceUploaded: invoiceUploadedPaths,
+        fileUploaded: fileUploadedPaths,
+        nextActionLawyer,
+        nextActionClient,
+        govtAppNumber : govtAppNumber2,
+        dateOfFilling,
+        lawyerRefrenceNumber : lawyerRefrenceNumber2,
+        inmNumber,
+        orderCompleteDate
+      }
+    });
+
+    res.status(200).json({
+      message: "New order is created",
+      newOrder
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(400).json({
+      message: "Can't create order"
+    });
+  }
+};
+
 
 interface MulterFiles {
     documentProvided?: Express.Multer.File[];
@@ -291,240 +646,361 @@ const storage = multer.memoryStorage();
   
 const upload = multer({ storage });
 
-  
+// updated
 export const updateOrder = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const orderId = parseInt(req.body.id);
-      const {
+  try {
+    const orderId = parseInt(req.params.id);
+    const {
+      dateOfOrder,
+      typeOfOrder,
+      payementExpected,
+      amountCharged,
+      amountPaid,
+      orderStatus,
+      newCommentStatus,
+      dateOdExpectation,
+      nextActionLawyer,
+      nextActionClient,
+      govtAppNumber,
+      dateOfFilling,
+      lawyerRefrenceNumber,
+      inmNumber,
+      orderCompleteDate
+    } = req.body;
+
+    const amountCharged2 = parseInt(amountCharged);
+    const amountPaid2 = parseInt(amountPaid);
+    const govtAppNumber2 = parseInt(govtAppNumber);
+    const lawyerRefrenceNumber2 = parseInt(lawyerRefrenceNumber);
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId }
+    });
+
+    if (!existingOrder) {
+      res.status(404).json({ message: "Order not found" });
+      return;
+    }
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const documentProvidedFiles = files.documentProvided || [];
+    const invoiceUploadedFiles = files.invoiceUploaded || [];
+    const fileUploadedFiles = files.fileUploaded || [];
+
+    const documentProvidedPaths = await Promise.all(
+      documentProvidedFiles.map(file => uploadFile(file, 'documentsProvided'))
+    );
+
+    const invoiceUploadedPaths = await Promise.all(
+      invoiceUploadedFiles.map(file => uploadFile(file, 'invoicesUploaded'))
+    );
+
+    const fileUploadedPaths = await Promise.all(
+      fileUploadedFiles.map(file => uploadFile(file, 'lawyerfiles'))
+    );
+
+    const updatedCommentStatusCycle = [
+      ...existingOrder.commentStatusCycle,
+      ...(newCommentStatus ? [newCommentStatus] : [])
+    ];
+
+    const updatedDocumentProvided = [
+      ...existingOrder.documentProvided,
+      ...documentProvidedPaths
+    ];
+
+    const updatedInvoiceUploaded = [
+      ...existingOrder.invoiceUploaded,
+      ...invoiceUploadedPaths
+    ];
+
+    const updatedFileUploaded = [
+      ...existingOrder.fileUploaded,
+      ...fileUploadedPaths
+    ];
+
+    const order = await prisma.order.update({
+      where: {
+        id: orderId
+      },
+      data: {
         dateOfOrder,
         typeOfOrder,
         payementExpected,
-        amountCharged,
-        amountPaid,
+        amountCharged: amountCharged2,
+        amountPaid: amountPaid2,
         orderStatus,
-        newCommentStatus,
+        commentStatusCycle: updatedCommentStatusCycle,
         dateOdExpectation,
+        documentProvided: updatedDocumentProvided,
+        invoiceUploaded: updatedInvoiceUploaded,
+        fileUploaded: updatedFileUploaded,
         nextActionLawyer,
         nextActionClient,
-        govtAppNumber,
+        govtAppNumber: govtAppNumber2,
         dateOfFilling,
-        lawyerRefrenceNumber,
+        lawyerRefrenceNumber: lawyerRefrenceNumber2,
         inmNumber,
         orderCompleteDate
-      } = req.body;
-  
-      const amountCharged2 = parseInt(amountCharged);
-      const amountPaid2 = parseInt(amountPaid);
-      const govtAppNumber2 = parseInt(govtAppNumber);
-      const lawyerRefrenceNumber2 = parseInt(lawyerRefrenceNumber);
-  
-      const existingOrder = await prisma.order.findUnique({
-        where: { id: orderId }
-      });
-  
-      if (!existingOrder) {
-        res.status(404).json({ message: "Order not found" });
-        return;
       }
-  
-      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-      const documentProvidedFiles = files.documentProvided || [];
-      const invoiceUploadedFiles = files.invoiceUploaded || [];
-      const fileUploadedFiles = files.fileUploaded || [];
-  
-      const documentProvidedPaths = await Promise.all(
-        documentProvidedFiles.map(file => uploadFile(file, 'documentsProvided'))
-      );
-  
-      const invoiceUploadedPaths = await Promise.all(
-        invoiceUploadedFiles.map(file => uploadFile(file, 'invoicesUploaded'))
-      );
-  
-      const fileUploadedPaths = await Promise.all(
-        fileUploadedFiles.map(file => uploadFile(file, 'lawyerfiles'))
-      );
-  
-      const updatedCommentStatusCycle = [
-        ...existingOrder.commentStatusCycle,
-        ...(newCommentStatus ? [newCommentStatus] : [])
-      ];
-  
-      const updatedDocumentProvided = [
-        ...existingOrder.documentProvided,
-        ...documentProvidedPaths
-      ];
-  
-      const updatedInvoiceUploaded = [
-        ...existingOrder.invoiceUploaded,
-        ...invoiceUploadedPaths
-      ];
-  
-      const updatedFileUploaded = [
-        ...existingOrder.fileUploaded,
-        ...fileUploadedPaths
-      ];
-  
-      const order = await prisma.order.update({
-        where: {
-          id: orderId
-        },
-        data: {
-          dateOfOrder,
-          typeOfOrder,
-          payementExpected,
-          amountCharged: amountCharged2,
-          amountPaid: amountPaid2,
-          orderStatus,
-          commentStatusCycle: updatedCommentStatusCycle,
-          dateOdExpectation,
-          documentProvided: updatedDocumentProvided,
-          invoiceUploaded: updatedInvoiceUploaded,
-          fileUploaded: updatedFileUploaded,
-          nextActionLawyer,
-          nextActionClient,
-          govtAppNumber: govtAppNumber2,
-          dateOfFilling,
-          lawyerRefrenceNumber: lawyerRefrenceNumber2,
-          inmNumber,
-          orderCompleteDate
-        }
-      });
-  
-      res.status(200).json({
-        message: "Order updated",
-        order
-      });
-    } catch (error) {
-      console.log(error);
-      res.status(401).json({
-        message: "Can't update your order, something went wrong"
-      });
-    }
-  };
-  
-  // Helper function to upload files
-const uploadFile = (file: Express.Multer.File, folder: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const uploadPath = path.join(__dirname, 'uploads', folder);
-      if (!fs.existsSync(uploadPath)) {
-        fs.mkdirSync(uploadPath, { recursive: true });
-      }
-      const filePath = path.join(uploadPath, `${Date.now()}-${file.originalname}`);
-      fs.writeFile(filePath, file.buffer, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(filePath);
-        }
-      });
     });
+
+    res.status(200).json({
+      message: "Order updated",
+      order
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(401).json({
+      message: "Can't update your order, something went wrong"
+    });
+  }
+};
+
+export const getOrdersByFirm = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { cursor, take } = req.query;
+
+  const takeNumber = parseInt(take as string) || 10; 
+  const cursorObject = cursor ? { id: parseInt(cursor as string) } : undefined;
+
+  try {
+    const orders = await prisma.order.findMany({
+      where: { firmId: parseInt(id) },
+      take: takeNumber,
+      skip: cursor ? 1 : 0,
+      cursor: cursorObject,
+      select: {
+        id: true,
+        dateOfOrder: true,
+        payementExpected: true,
+        user: {
+          select: {
+            name: true,
+          },
+        },
+        firm: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    const nextCursor = orders.length === takeNumber ? orders[orders.length - 1].id : null;
+
+    res.status(200).json({
+      orders,
+      nextCursor,
+    });
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+    res.status(500).json({ message: 'Error fetching orders' });
+  }
+};
+
+
+//updated
+export const getUsers = async (req: Request, res: Response) => {
+  try {
+    const { cursor, limit = 15, name, email, includeInactive } = req.query;
+    const pageSize = parseInt(limit as string) || 15;
+
+    const whereClause: any = {};
+    if (name) {
+      whereClause.name = { contains: name as string, mode: "insensitive" };
+    }
+    if (email) {
+      whereClause.email = { contains: email as string, mode: "insensitive" };
+    }
+    if (includeInactive !== 'true') {
+      whereClause.isDeleted = false;
+    }
+
+    const users = await prisma.user.findMany({
+      take: pageSize + 1,
+      skip: cursor ? 1 : 0,
+      cursor: cursor ? { id: parseInt(cursor as string) } : undefined,
+      where: Object.keys(whereClause).length ? whereClause : undefined,
+    });
+
+    const hasNextPage = users.length > pageSize;
+    if (hasNextPage) users.pop();
+
+    const nextCursor = hasNextPage ? users[users.length - 1].id : null;
+
+    res.status(200).json({
+      message: "all users",
+      data: users,
+      nextCursor,
+    });
+  } catch (error) {
+    res.status(404).json({
+      message: "cannot get users at the moment",
+    });
+  }
+};
+
+
+
+// need to update
+export const getContractor = async (req: Request, res: Response) => {
+  try {
+    const { cursor, limit, name, email } = req.query;
+    const pageSize = parseInt(limit as string) || 10;
+
+    const whereClause: any = {};
+    if (name) {
+      whereClause.name = { contains: name as string, mode: "insensitive" };
+    }
+    if (email) {
+      whereClause.email = { contains: email as string, mode: "insensitive" };
+    }
+
+    const firms = await prisma.firm.findMany({
+      take: pageSize + 1,
+      skip: cursor ? 1 : 0,
+      cursor: cursor ? { id: parseInt(cursor as string) } : undefined,
+      where: Object.keys(whereClause).length ? whereClause : undefined,
+    });
+
+    const hasNextPage = firms.length > pageSize;
+    if (hasNextPage) firms.pop();
+
+    const firmsWithFileLinks = await Promise.all(firms.map(async (firm) => {
+      const agreementFileUrl = firm.agreementFile ? await getPublicUrl(firm.agreementFile) : null;
+      const ndaFileUrl = firm.ndaFile ? await getPublicUrl(firm.ndaFile) : null;
+      const otherFileUrl = firm.other ? await getPublicUrl(firm.other) : null;
+
+      return {
+        ...firm,
+        agreementFile: agreementFileUrl,
+        ndaFile: ndaFileUrl,
+        other: otherFileUrl
+      };
+    }));
+
+    res.status(200).json({
+      message: "All firms",
+      firms: firmsWithFileLinks,
+      nextCursor: hasNextPage ? firms[firms.length - 1].id : null
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(404).json({
+      message: "Cannot get firms at the moment"
+    });
+  }
 };
   
-export const getUsers = async (req : Request , res : Response) =>{
-    try {
-        const user = await prisma.user.findMany();
-        res.status(200).json({
-            message : "all users ",
-            user
-        })
-    } catch (error) {
-        res.status(404).json({
-            message : "can get user at the moment"
-        })        
-    }
-}
-
-export const downloadFile = async (req : Request, res: Response) =>{
-    try {
-        const path = req.body.path;
-        const downloadURL =await getPublicUrl(path);
-        res.status(200).json({
-            message : "this is ur download link",
-            downloadURL
-        })
-    } catch (error) {
-        res.json(404).json({
-            message : "cant download this now"
-        })
-    }
-}
-
-
-export const getContractor = async (req : Request , res : Response)=>{
-    try {
-        const user = await prisma.firm.findMany();
-        res.status(200).json({
-            message : "all firm",
-            user
-        })
-    } catch (error) {
-        res.status(404).json({
-            message : "can get user at the moment"
-        })        
-    }
-}
-
-export const getFile = (req: Request, res: Response): void => {
-    const { folder, filename } = req.params;
-    const filePath = path.join(__dirname, 'uploads', folder, filename);
-  
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).json({ message: "File not found" });
-    }
-  };
-  
-
-export const getOrder = async (req: Request, res: Response): Promise<void> => {
-    try {
+//this is to get whole order (updated)
+export const getOrderById = async (req: Request, res: Response): Promise<void> => {
+  try {
       const orderId = parseInt(req.params.id);
-  
+
       const order = await prisma.order.findUnique({
-        where: { id: orderId }
+          where: { id: orderId }
       });
-  
+
       if (!order) {
-        res.status(404).json({ message: "Order not found" });
-        return;
+          res.status(404).json({ message: "Order not found" });
+          return;
       }
-  
-      const generateFileLinks = (files: string[], folder: string) => {
-        return files.map(file => ({
-          filename: path.basename(file),
-          url: `${req.protocol}://${req.get('host')}/api/admin/file/${folder}/${path.basename(file)}`
-        }));
+
+      const generateFileLinks = async (files: string[], folder: string) => {
+          const links = await Promise.all(files.map(async file => {
+              const publicUrl = await getPublicUrl(`${folder}/${path.basename(file)}`);
+              return {
+                  filename: path.basename(file),
+                  url: publicUrl
+              };
+          }));
+          return links;
       };
-  
-      const documentProvidedLinks = generateFileLinks(order.documentProvided, 'documentsProvided');
-      const invoiceUploadedLinks = generateFileLinks(order.invoiceUploaded, 'invoicesUploaded');
-      const fileUploadedLinks = generateFileLinks(order.fileUploaded, 'lawyerfiles');
-  
+
+      const documentProvidedLinks = await generateFileLinks(order.documentProvided, 'documentsProvided');
+      const invoiceUploadedLinks = await generateFileLinks(order.invoiceUploaded, 'invoicesUploaded');
+      const fileUploadedLinks = await generateFileLinks(order.fileUploaded, 'lawyerfiles');
+
       res.status(200).json({
-        ...order,
-        documentProvidedLinks,
-        invoiceUploadedLinks,
-        fileUploadedLinks
+          ...order,
+          documentProvidedLinks,
+          invoiceUploadedLinks,
+          fileUploadedLinks
       });
-    } catch (error) {
+  } catch (error) {
       console.log(error);
       res.status(500).json({
-        message: "Can't fetch the order, something went wrong"
+          message: "Can't fetch the order, something went wrong"
       });
-    }
-  };
+  }
+};
 
-export const order = async (req : Request , res : Response) =>{
-    try {
-        const data = await prisma.order.findMany();
-        res.status(200).json({
-            data
-        })
-    } catch (error) {
-        res.status(400).json({
-            message : "can not get orders"
-        })       
-    }
-    
 
-}
+//this is to get list of order 10(updated)
+export const getOrders = async (req: Request, res: Response): Promise<void> => {
+  try {
+      const { cursor, limit = 2, userId } = req.query;
+      const limitNumber = parseInt(limit as string);
+
+      const orders = await prisma.order.findMany({
+          take: limitNumber,
+          skip: cursor ? 1 : 0,
+          cursor: cursor ? { id: parseInt(cursor as string) } : undefined,
+          where: userId ? { userId: parseInt(userId as string) } : undefined,
+          select: {
+              id: true, 
+              dateOfOrder: true,
+              orderStatus: true,
+              firm: {
+                  select: {
+                      name: true
+                  }
+              },
+          }
+      });
+
+      if (orders.length === 0) {
+        res.status(200).json({ orders: [], nextCursor: null });
+          return;
+      }
+
+      const ordersWithLinks = orders.map(order => ({
+          id: order.id, 
+          dateOfOrder: order.dateOfOrder,
+          orderStatus: order.orderStatus,
+          vendor: order.firm.name,
+      }));
+
+      const nextCursor = orders.length === limitNumber ? orders[orders.length - 1].id : null;
+
+      res.status(200).json({
+          orders: ordersWithLinks,
+          nextCursor
+      });
+  } catch (error) {
+      console.log(error);
+      res.status(500).json({
+          message: "Can't fetch the orders, something went wrong"
+      });
+  }
+};
+
+
+//updated
+export const userById = async (req : Request,  res  : Response) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(id) },
+    });
+    if (user) {
+      res.status(200).json({ user });
+    } else {
+      res.status(404).json({ message: "User not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get user at the moment" });
+  }
+};
+
