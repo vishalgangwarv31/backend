@@ -292,10 +292,12 @@ export const updateUser = async (req: Request, res: Response) => {
     pocName,
     gstNumber,
     dpiit,
-    dpiitDate
+    dpiitDate,
+    isDeleted
   } = req.body;
 
   const dpiit2 = (dpiit === "true") ? true : false;
+  const isDeleted2 = (isDeleted === 'true') ? true : false;
 
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -336,8 +338,9 @@ export const updateUser = async (req: Request, res: Response) => {
         pocPhone,
         pocName,
         gstNumber,
-        dpiit : dpiit2,
+        dpiit: dpiit2,
         dpiitDate,
+        isDeleted : isDeleted2,
         tdsFile: [...existingUser.tdsFile, ...tdsFilePaths],
         gstFile: [...existingUser.gstFile, ...gstFilePaths],
         ndaFile: [...existingUser.ndaFile, ...ndaFilePaths],
@@ -359,6 +362,7 @@ export const updateUser = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 
 export const createContractor = async (req: Request, res: Response) => {
@@ -430,9 +434,11 @@ export const updateFirm = async (req: Request, res: Response): Promise<void> => 
       startup,
       agreementFile,
       ndaFile,
-      other
+      other,
+      isDeleted 
     } = req.body;
 
+    const isDeleted2 = (isDeleted === 'true')? true : false;
     const existingFirm = await prisma.firm.findUnique({
       where: { id: firmId }
     });
@@ -468,6 +474,7 @@ export const updateFirm = async (req: Request, res: Response): Promise<void> => 
         email,
         workType,
         startup,
+        isDeleted : isDeleted2, 
         agreementFile: agreementFilePaths.length ? agreementFilePaths[0] : existingFirm.agreementFile,
         ndaFile: ndaFilePaths.length ? ndaFilePaths[0] : existingFirm.ndaFile,
         other: otherFilePaths.length ? otherFilePaths[0] : existingFirm.other
@@ -799,7 +806,6 @@ export const getOrdersByFirm = async (req: Request, res: Response) => {
   }
 };
 
-
 //updated
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -841,12 +847,10 @@ export const getUsers = async (req: Request, res: Response) => {
   }
 };
 
-
-
 // need to update
 export const getContractor = async (req: Request, res: Response) => {
   try {
-    const { cursor, limit, name, email } = req.query;
+    const { cursor, limit, name, email, isInactive } = req.query;
     const pageSize = parseInt(limit as string) || 10;
 
     const whereClause: any = {};
@@ -855,6 +859,9 @@ export const getContractor = async (req: Request, res: Response) => {
     }
     if (email) {
       whereClause.email = { contains: email as string, mode: "insensitive" };
+    }
+    if (isInactive !== 'true') {
+      whereClause.isDeleted = false;
     }
 
     const firms = await prisma.firm.findMany({
@@ -892,7 +899,7 @@ export const getContractor = async (req: Request, res: Response) => {
     });
   }
 };
-  
+
 //this is to get whole order (updated)
 export const getOrderById = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1004,3 +1011,54 @@ export const userById = async (req : Request,  res  : Response) => {
   }
 };
 
+
+
+export const getUserVisibilitySettings = async (req: Request, res: Response) => {
+  try {
+      const visibilitySettings = await prisma.userVisibilitySetting.findMany();
+
+      res.status(200).json(visibilitySettings);
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "Can't fetch visibility settings, something went wrong"
+        });
+    }
+
+};
+
+// Update visibility settings for a specific user
+export const updateUserVisibilitySettings = async (req: Request, res: Response) => {
+  try {
+    const { settings } = req.body; // settings should be an array of { fieldName, isVisible }
+
+    const updatePromises = settings.map(async (setting: { fieldName: string, isVisible: boolean }) => {
+        const existingSetting = await prisma.userVisibilitySetting.findUnique({
+            where: { fieldName: setting.fieldName }
+        });
+
+        if (existingSetting) {
+            return prisma.userVisibilitySetting.update({
+                where: { fieldName: setting.fieldName },
+                data: { isVisible: setting.isVisible }
+            });
+        } else {
+            return prisma.userVisibilitySetting.create({
+                data: {
+                    fieldName: setting.fieldName,
+                    isVisible: setting.isVisible
+                }
+            });
+        }
+    });
+
+    await Promise.all(updatePromises);
+
+    res.status(200).json({ message: "Visibility settings updated" });
+} catch (error) {
+    console.log(error);
+    res.status(500).json({
+        message: "Can't update visibility settings, something went wrong"
+    });
+}
+};

@@ -36,6 +36,7 @@ model User {
   panCard   String[]
   udhyanFile String[]
   otherFile String[]
+  
   isDeleted  Boolean  @default(false)
 
   orders     Order[] 
@@ -91,4 +92,15 @@ model Order {
   createdAt     DateTime @default(now())
 }
 
+model UserVisibilitySetting {
+  id        Int      @id @default(autoincrement())
+  fieldName String   @unique
+  isVisible Boolean  @default(true)
+}
 
+
+model FirmVisibilitySetting {
+  id        Int      @id @default(autoincrement())
+  fieldName String   @unique
+  isVisible Boolean  @default(true)
+}

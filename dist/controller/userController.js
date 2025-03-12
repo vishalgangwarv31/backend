@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadFile = exports.updateOrder = exports.updateUser = exports.orders = exports.getUser = exports.resetPassword = exports.forgetPassword = exports.login = void 0;
+exports.updateOrder = exports.updateUser = exports.orders = exports.getUser = exports.resetPassword = exports.forgetPassword = exports.login = void 0;
 const jsonwebtoken_1 = require("jsonwebtoken");
 const client_1 = __importDefault(require("../prisma/client"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
@@ -142,18 +142,35 @@ const getUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             res.status(404).json({ message: "User not found" });
             return;
         }
+        const getFileUrls = (files) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield Promise.all(files.map(file => (0, uploadFile_1.getPublicUrl)(file)));
+        });
         const files = {
-        // panCard: user.panCard ? await getPublicUrl(user.panCard as string) : null,
-        // tdsFile: user.tdsFile ? await getPublicUrl(user.tdsFile as string) : null,
-        // gstFile: user.gstFile ? await getPublicUrl(user.gstFile as string ) : null,
-        // ndaFile: user.ndaFile ? await getPublicUrl(user.ndaFile as string) : null,
-        // dpiitFile: user.dpiitFile ? await getPublicUrl(user.dpiitFile as string) : null,
-        // agreementFile: user.agreementFile ?await getPublicUrl(user.agreementFile as string) : null,
-        // qunatifoFile: user.qunatifoFile ?await getPublicUrl(user.qunatifoFile as string) : null,
-        // udhyanFile: user.udhyanFile ?await getPublicUrl(user.udhyanFile as string) : null
+            panCard: user.panCard ? yield getFileUrls(user.panCard) : [],
+            tdsFile: user.tdsFile ? yield getFileUrls(user.tdsFile) : [],
+            gstFile: user.gstFile ? yield getFileUrls(user.gstFile) : [],
+            ndaFile: user.ndaFile ? yield getFileUrls(user.ndaFile) : [],
+            dpiitFile: user.dpiitFile ? yield getFileUrls(user.dpiitFile) : [],
+            agreementFile: user.agreementFile ? yield getFileUrls(user.agreementFile) : [],
+            qunatifoFile: user.qunatifoFile ? yield getFileUrls(user.qunatifoFile) : [],
+            udhyanFile: user.udhyanFile ? yield getFileUrls(user.udhyanFile) : [],
+            otherFile: user.otherFile ? yield getFileUrls(user.otherFile) : []
         };
         res.status(200).json({
-            user,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                password: user.password,
+                createdAt: user.createdAt,
+                type: user.type,
+                pocPhone: user.pocPhone,
+                pocName: user.pocName,
+                gstNumber: user.gstNumber,
+                dpiit: user.dpiit,
+                dpiitDate: user.dpiitDate,
+                isDeleted: user.isDeleted,
+            },
             files
         });
     }
@@ -168,28 +185,43 @@ exports.getUser = getUser;
 const orders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user = req.user;
-        const myOrders = yield client_1.default.order.findMany({
-            where: {
-                userId: user.id
-            }
+        const { cursor, limit } = req.query;
+        const pageSize = parseInt(limit) || 10;
+        const orders = yield client_1.default.order.findMany({
+            where: { userId: user.id },
+            take: pageSize + 1,
+            skip: cursor ? 1 : 0,
+            cursor: cursor ? { id: parseInt(cursor) } : undefined,
         });
+        const hasNextPage = orders.length > pageSize;
+        if (hasNextPage)
+            orders.pop();
+        const getFileUrls = (files) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield Promise.all(files.map(file => (0, uploadFile_1.getPublicUrl)(file)));
+        });
+        const ordersWithFileLinks = yield Promise.all(orders.map((order) => __awaiter(void 0, void 0, void 0, function* () {
+            const documentProvidedUrls = yield getFileUrls(order.documentProvided);
+            const invoiceUploadedUrls = yield getFileUrls(order.invoiceUploaded);
+            const fileUploadedUrls = yield getFileUrls(order.fileUploaded);
+            return Object.assign(Object.assign({}, order), { documentProvided: documentProvidedUrls, invoiceUploaded: invoiceUploadedUrls, fileUploaded: fileUploadedUrls });
+        })));
         res.status(200).json({
-            myOrders,
-            message: "these are ur order"
+            orders: ordersWithFileLinks,
+            nextCursor: hasNextPage ? orders[orders.length - 1].id : null,
+            hasNextPage
         });
     }
     catch (error) {
+        console.log(error);
         res.status(400).json({
-            message: "something went wrong"
+            message: "Something went wrong"
         });
     }
 });
 exports.orders = orders;
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
     try {
-        const temp = req.user;
-        const id = temp.id;
+        const id = parseInt(req.params.id);
         const gstNumber = req.body.gstNumber;
         const name = req.body.name;
         const type = req.body.type;
@@ -198,54 +230,28 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const dpiit = req.body.dpiit;
         const dpiitDate = req.body.dpiitDate;
         const files = req.files;
-        const panCardFile = (_a = files.panCard) === null || _a === void 0 ? void 0 : _a[0];
-        const tdsFile = (_b = files.tdsFile) === null || _b === void 0 ? void 0 : _b[0];
-        const gstFile = (_c = files.gstFile) === null || _c === void 0 ? void 0 : _c[0];
-        const ndaFile = (_d = files.ndaFile) === null || _d === void 0 ? void 0 : _d[0];
-        const dpiitFile = (_e = files.dpiitFile) === null || _e === void 0 ? void 0 : _e[0];
-        const agreementFile = (_f = files.agreementFile) === null || _f === void 0 ? void 0 : _f[0];
-        const qunatifoFile = (_g = files.qunatifoFile) === null || _g === void 0 ? void 0 : _g[0];
-        const udhyanFile = (_h = files.udhyanFile) === null || _h === void 0 ? void 0 : _h[0];
-        let panCardPath = null;
-        let tdsFilePath = null;
-        let gstFilePath = null;
-        let ndaFilePath = null;
-        let dpiitFilePath = null;
-        let agreementFilePath = null;
-        let qunatifoFilePath = null;
-        let udhyanFilePath = null;
-        let dpiitBool;
-        if (dpiit === "true") {
-            dpiitBool = true;
-        }
-        else {
-            dpiitBool = false;
-        }
-        if (panCardFile) {
-            panCardPath = yield (0, uploadFile_1.uploadFile)(panCardFile, 'pancards');
-        }
-        if (tdsFile) {
-            tdsFilePath = yield (0, uploadFile_1.uploadFile)(tdsFile, 'tdsfiles');
-        }
-        if (gstFile) {
-            gstFilePath = yield (0, uploadFile_1.uploadFile)(gstFile, 'gstfiles');
-        }
-        if (ndaFile) {
-            ndaFilePath = yield (0, uploadFile_1.uploadFile)(ndaFile, 'ndafiles');
-        }
-        if (dpiitFile) {
-            dpiitFilePath = yield (0, uploadFile_1.uploadFile)(dpiitFile, 'dpiitfiles');
-        }
-        if (agreementFile) {
-            agreementFilePath = yield (0, uploadFile_1.uploadFile)(agreementFile, 'agreementfiles');
-        }
-        if (qunatifoFile) {
-            qunatifoFilePath = yield (0, uploadFile_1.uploadFile)(qunatifoFile, 'qunatifofiles');
-        }
-        if (udhyanFile) {
-            udhyanFilePath = yield (0, uploadFile_1.uploadFile)(udhyanFile, 'udhyanfiles');
-        }
-        // Validate and parse dpiitDate
+        const panCardFiles = files.panCard || [];
+        const tdsFiles = files.tdsFile || [];
+        const gstFiles = files.gstFile || [];
+        const ndaFiles = files.ndaFile || [];
+        const dpiitFiles = files.dpiitFile || [];
+        const agreementFiles = files.agreementFile || [];
+        const qunatifoFiles = files.qunatifoFile || [];
+        const udhyanFiles = files.udhyanFile || [];
+        const otherFiles = files.otherFile || [];
+        const uploadPromises = [
+            ...panCardFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'pancards')),
+            ...tdsFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'tdsfiles')),
+            ...gstFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'gstfiles')),
+            ...ndaFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'ndafiles')),
+            ...dpiitFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'dpiitfiles')),
+            ...agreementFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'agreementfiles')),
+            ...qunatifoFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'qunatifofiles')),
+            ...udhyanFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'udhyanfiles')),
+            ...otherFiles.map(file => (0, uploadFile_1.uploadFile)(file, 'otherfiles'))
+        ];
+        const filePaths = yield Promise.all(uploadPromises);
+        const dpiitBool = dpiit === "true";
         let parsedDpiitDate = null;
         if (dpiitDate) {
             parsedDpiitDate = new Date(dpiitDate);
@@ -266,14 +272,15 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 pocName: pocName,
                 dpiit: dpiitBool,
                 dpiitDate: parsedDpiitDate,
-                // panCard: panCardPath,
-                // tdsFile: tdsFilePath,
-                // gstFile: gstFilePath,
-                // ndaFile: ndaFilePath,
-                // dpiitFile: dpiitFilePath,
-                // agreementFile: agreementFilePath,
-                // qunatifoFile: qunatifoFilePath,
-                // udhyanFile: udhyanFilePath
+                panCard: panCardFiles.map((_, index) => filePaths[index]),
+                tdsFile: tdsFiles.map((_, index) => filePaths[panCardFiles.length + index]),
+                gstFile: gstFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + index]),
+                ndaFile: ndaFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + index]),
+                dpiitFile: dpiitFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + index]),
+                agreementFile: agreementFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + index]),
+                qunatifoFile: qunatifoFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + agreementFiles.length + index]),
+                udhyanFile: udhyanFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + agreementFiles.length + qunatifoFiles.length + index]),
+                otherFile: otherFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + agreementFiles.length + qunatifoFiles.length + udhyanFiles.length + index])
             }
         });
         res.status(200).json({
@@ -291,10 +298,11 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 exports.updateUser = updateUser;
 const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const id = req.user.id;
-        const orderId = parseInt(req.body.orderId);
+        const userId = req.user.id;
+        const orderId = parseInt(req.params.id);
+        // console.log(userId, orderId)     
         const existingOrder = yield client_1.default.order.findUnique({
-            where: { id: orderId, userId: id }
+            where: { id: orderId, userId: userId }
         });
         if (!existingOrder) {
             res.status(404).json({ message: "Order not found" });
@@ -307,15 +315,28 @@ const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             ...existingOrder.documentProvided,
             ...documentProvidedPaths
         ];
-        const nextActionClient = req.body.nextActionClient;
+        const { dateOfOrder, typeOfOrder, payementExpected, amountCharged, amountPaid, orderStatus, commentStatusCycle, dateOdExpectation, nextActionLawyer, nextActionClient, govtAppNumber, dateOfFilling, inmNumber, orderCompleteDate } = req.body;
         const order = yield client_1.default.order.update({
             where: {
                 id: orderId,
-                userId: id
+                userId: userId
             },
             data: {
+                dateOfOrder: dateOfOrder || existingOrder.dateOfOrder,
+                typeOfOrder: typeOfOrder || existingOrder.typeOfOrder,
+                payementExpected: payementExpected || existingOrder.payementExpected,
+                amountCharged: amountCharged !== undefined ? parseFloat(amountCharged) : existingOrder.amountCharged,
+                amountPaid: amountPaid !== undefined ? parseFloat(amountPaid) : existingOrder.amountPaid,
+                orderStatus: orderStatus || existingOrder.orderStatus,
+                commentStatusCycle: commentStatusCycle ? commentStatusCycle.split(',').map((item) => item.trim()) : existingOrder.commentStatusCycle,
+                dateOdExpectation: dateOdExpectation || existingOrder.dateOdExpectation,
                 documentProvided: updatedDocumentProvided,
-                nextActionClient: nextActionClient
+                nextActionLawyer: nextActionLawyer || existingOrder.nextActionLawyer,
+                nextActionClient: nextActionClient || existingOrder.nextActionClient,
+                govtAppNumber: govtAppNumber !== undefined ? parseInt(govtAppNumber) : existingOrder.govtAppNumber,
+                dateOfFilling: dateOfFilling || existingOrder.dateOfFilling,
+                inmNumber: inmNumber || existingOrder.inmNumber,
+                orderCompleteDate: orderCompleteDate || existingOrder.orderCompleteDate
             }
         });
         res.status(200).json({
@@ -331,21 +352,3 @@ const updateOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.updateOrder = updateOrder;
-const downloadFile = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const id = req.user.id;
-        const orderId = parseInt(req.body.orderId);
-        const path = req.body.path;
-        const downloadURL = yield (0, uploadFile_1.getPublicUrl)(path);
-        res.status(200).json({
-            message: "this is ur download link",
-            downloadURL
-        });
-    }
-    catch (error) {
-        res.json(404).json({
-            message: "cant download this now"
-        });
-    }
-});
-exports.downloadFile = downloadFile;

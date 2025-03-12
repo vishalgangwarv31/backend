@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { login , signup , createUser , createContractor , createOrder ,updateOrder ,getUsers , getContractor, forgetPassword, resetPassword, userById, getOrderById, getOrders, updateUser, updateFirm, getContractorById, getAllUsers, getAllFirms, getOrdersByFirm} from '../controller/adminController'
+import { login , signup , createUser , createContractor , createOrder ,updateOrder ,getUsers , getContractor, forgetPassword, resetPassword, userById, getOrderById, getOrders, updateUser, updateFirm, getContractorById, getAllUsers, getAllFirms, getOrdersByFirm, getUserVisibilitySettings, updateUserVisibilitySettings} from '../controller/adminController'
 import asyncHandler from 'express-async-handler'
 import { adminAuthMiddleware } from "../middleware/adminAuthMiddleware"
 import { upload } from "../config/multerConfig"
@@ -10,6 +10,7 @@ const adminRoutes = Router()
 
 adminRoutes.post('/login', login); // no need
 adminRoutes.post('/signup', signup); // no need
+adminRoutes.get('/user-visibility', getUserVisibilitySettings);
 adminRoutes.post('/forget-password', forgetPassword); // no need
 adminRoutes.post('/reset-password/:id/:token', resetPassword); //updt
 
@@ -38,6 +39,7 @@ adminRoutes.put('/update-user/:id', adminAuthMiddleware, upload.fields([
     { name: 'udhyanFile', maxCount: 10 }
 ]), updateUser);
 
+adminRoutes.put('/user-update-visibility', adminAuthMiddleware, updateUserVisibilitySettings);
 
 //vendor
 adminRoutes.post('/create-contractor', adminAuthMiddleware, upload.fields([

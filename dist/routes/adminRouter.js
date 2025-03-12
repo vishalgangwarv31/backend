@@ -8,6 +8,7 @@ const adminRoutes = (0, express_1.Router)();
 // '/api/admin/
 adminRoutes.post('/login', adminController_1.login); // no need
 adminRoutes.post('/signup', adminController_1.signup); // no need
+adminRoutes.get('/user-visibility', adminController_1.getUserVisibilitySettings);
 adminRoutes.post('/forget-password', adminController_1.forgetPassword); // no need
 adminRoutes.post('/reset-password/:id/:token', adminController_1.resetPassword); //updt
 //customer
@@ -34,6 +35,7 @@ adminRoutes.put('/update-user/:id', adminAuthMiddleware_1.adminAuthMiddleware, m
     { name: 'panCard', maxCount: 10 },
     { name: 'udhyanFile', maxCount: 10 }
 ]), adminController_1.updateUser);
+adminRoutes.put('/user-update-visibility', adminAuthMiddleware_1.adminAuthMiddleware, adminController_1.updateUserVisibilitySettings);
 //vendor
 adminRoutes.post('/create-contractor', adminAuthMiddleware_1.adminAuthMiddleware, multerConfig_1.upload.fields([
     { name: 'agreementFile', maxCount: 10 },

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.userById = exports.getOrders = exports.getOrderById = exports.getContractor = exports.getUsers = exports.getOrdersByFirm = exports.updateOrder = exports.createOrder = exports.getAllFirms = exports.getContractorById = exports.updateFirm = exports.createContractor = exports.updateUser = exports.getAllUsers = exports.createUser = exports.resetPassword = exports.forgetPassword = exports.signup = exports.login = void 0;
+exports.updateUserVisibilitySettings = exports.getUserVisibilitySettings = exports.userById = exports.getOrders = exports.getOrderById = exports.getContractor = exports.getUsers = exports.getOrdersByFirm = exports.updateOrder = exports.createOrder = exports.getAllFirms = exports.getContractorById = exports.updateFirm = exports.createContractor = exports.updateUser = exports.getAllUsers = exports.createUser = exports.resetPassword = exports.forgetPassword = exports.signup = exports.login = void 0;
 const client_1 = __importDefault(require("../prisma/client"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = require("jsonwebtoken");
@@ -249,8 +249,9 @@ const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.getAllUsers = getAllUsers;
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = parseInt(req.params.id);
-    const { name, email, password, type, pocPhone, pocName, gstNumber, dpiit, dpiitDate } = req.body;
+    const { name, email, password, type, pocPhone, pocName, gstNumber, dpiit, dpiitDate, isDeleted } = req.body;
     const dpiit2 = (dpiit === "true") ? true : false;
+    const isDeleted2 = (isDeleted === 'true') ? true : false;
     const files = req.files;
     const uploadFiles = (files, folder) => __awaiter(void 0, void 0, void 0, function* () {
         return yield Promise.all(files.map(file => (0, uploadFile_1.uploadFile)(file, folder)));
@@ -286,6 +287,7 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 gstNumber,
                 dpiit: dpiit2,
                 dpiitDate,
+                isDeleted: isDeleted2,
                 tdsFile: [...existingUser.tdsFile, ...tdsFilePaths],
                 gstFile: [...existingUser.gstFile, ...gstFilePaths],
                 ndaFile: [...existingUser.ndaFile, ...ndaFilePaths],
@@ -358,7 +360,8 @@ exports.createContractor = createContractor;
 const updateFirm = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const firmId = parseInt(req.params.id);
-        const { name, email, workType, startup, agreementFile, ndaFile, other } = req.body;
+        const { name, email, workType, startup, agreementFile, ndaFile, other, isDeleted } = req.body;
+        const isDeleted2 = (isDeleted === 'true') ? true : false;
         const existingFirm = yield client_1.default.firm.findUnique({
             where: { id: firmId }
         });
@@ -382,6 +385,7 @@ const updateFirm = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 email,
                 workType,
                 startup,
+                isDeleted: isDeleted2,
                 agreementFile: agreementFilePaths.length ? agreementFilePaths[0] : existingFirm.agreementFile,
                 ndaFile: ndaFilePaths.length ? ndaFilePaths[0] : existingFirm.ndaFile,
                 other: otherFilePaths.length ? otherFilePaths[0] : existingFirm.other
@@ -664,7 +668,7 @@ exports.getUsers = getUsers;
 // need to update
 const getContractor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { cursor, limit, name, email } = req.query;
+        const { cursor, limit, name, email, isInactive } = req.query;
         const pageSize = parseInt(limit) || 10;
         const whereClause = {};
         if (name) {
@@ -672,6 +676,9 @@ const getContractor = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         }
         if (email) {
             whereClause.email = { contains: email, mode: "insensitive" };
+        }
+        if (isInactive !== 'true') {
+            whereClause.isDeleted = false;
         }
         const firms = yield client_1.default.firm.findMany({
             take: pageSize + 1,
@@ -802,3 +809,50 @@ const userById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.userById = userById;
+const getUserVisibilitySettings = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const visibilitySettings = yield client_1.default.userVisibilitySetting.findMany();
+        res.status(200).json(visibilitySettings);
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "Can't fetch visibility settings, something went wrong"
+        });
+    }
+});
+exports.getUserVisibilitySettings = getUserVisibilitySettings;
+// Update visibility settings for a specific user
+const updateUserVisibilitySettings = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { settings } = req.body; // settings should be an array of { fieldName, isVisible }
+        const updatePromises = settings.map((setting) => __awaiter(void 0, void 0, void 0, function* () {
+            const existingSetting = yield client_1.default.userVisibilitySetting.findUnique({
+                where: { fieldName: setting.fieldName }
+            });
+            if (existingSetting) {
+                return client_1.default.userVisibilitySetting.update({
+                    where: { fieldName: setting.fieldName },
+                    data: { isVisible: setting.isVisible }
+                });
+            }
+            else {
+                return client_1.default.userVisibilitySetting.create({
+                    data: {
+                        fieldName: setting.fieldName,
+                        isVisible: setting.isVisible
+                    }
+                });
+            }
+        }));
+        yield Promise.all(updatePromises);
+        res.status(200).json({ message: "Visibility settings updated" });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "Can't update visibility settings, something went wrong"
+        });
+    }
+});
+exports.updateUserVisibilitySettings = updateUserVisibilitySettings;

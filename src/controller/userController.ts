@@ -138,61 +138,106 @@ try {
 
 }
 
-export const getUser = async (req : Request , res : Response): Promise<void> =>{
+export const getUser = async (req: Request, res: Response): Promise<void> => {
     try {
-        const temp = (req as IGetUserAuthInfoRequest).user;
-        const userId = temp.id;
-        const user = await prisma.user.findUnique({
-            where: { id: userId }
+      const temp = (req as IGetUserAuthInfoRequest).user;
+      const userId = temp.id;
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+  
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+  
+      const getFileUrls = async (files: string[]) => {
+        return await Promise.all(files.map(file => getPublicUrl(file)));
+      };
+  
+      const files = {
+        panCard: user.panCard ? await getFileUrls(user.panCard) : [],
+        tdsFile: user.tdsFile ? await getFileUrls(user.tdsFile) : [],
+        gstFile: user.gstFile ? await getFileUrls(user.gstFile) : [],
+        ndaFile: user.ndaFile ? await getFileUrls(user.ndaFile) : [],
+        dpiitFile: user.dpiitFile ? await getFileUrls(user.dpiitFile) : [],
+        agreementFile: user.agreementFile ? await getFileUrls(user.agreementFile) : [],
+        qunatifoFile: user.qunatifoFile ? await getFileUrls(user.qunatifoFile) : [],
+        udhyanFile: user.udhyanFile ? await getFileUrls(user.udhyanFile) : [],
+        otherFile: user.otherFile ? await getFileUrls(user.otherFile) : []
+      };
+  
+      res.status(200).json({
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          password: user.password,
+          createdAt: user.createdAt,
+          type: user.type,
+          pocPhone: user.pocPhone,
+          pocName: user.pocName,
+          gstNumber: user.gstNumber,
+          dpiit: user.dpiit,
+          dpiitDate: user.dpiitDate,
+          isDeleted: user.isDeleted,
+        },
+        files
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({
+        message: "Can't retrieve user, something went wrong"
+      });
+    }
+  };
+  
+export const orders = async (req: Request, res: Response) => {
+    try {
+        const user = (req as IGetUserAuthInfoRequest).user;
+        const { cursor, limit } = req.query;
+        const pageSize = parseInt(limit as string) || 10;
+
+        const orders = await prisma.order.findMany({
+            where: { userId: user.id },
+            take: pageSize + 1,
+            skip: cursor ? 1 : 0,
+            cursor: cursor ? { id: parseInt(cursor as string) } : undefined,
         });
 
-        if (!user) {
-            res.status(404).json({ message: "User not found" });
-            return;
-        }
-        const files = {
-            // panCard: user.panCard ? await getPublicUrl(user.panCard as string) : null,
-            // tdsFile: user.tdsFile ? await getPublicUrl(user.tdsFile as string) : null,
-            // gstFile: user.gstFile ? await getPublicUrl(user.gstFile as string ) : null,
-            // ndaFile: user.ndaFile ? await getPublicUrl(user.ndaFile as string) : null,
-            // dpiitFile: user.dpiitFile ? await getPublicUrl(user.dpiitFile as string) : null,
-            // agreementFile: user.agreementFile ?await getPublicUrl(user.agreementFile as string) : null,
-            // qunatifoFile: user.qunatifoFile ?await getPublicUrl(user.qunatifoFile as string) : null,
-            // udhyanFile: user.udhyanFile ?await getPublicUrl(user.udhyanFile as string) : null
+        const hasNextPage = orders.length > pageSize;
+        if (hasNextPage) orders.pop();
+
+        const getFileUrls = async (files: string[]) => {
+            return await Promise.all(files.map(file => getPublicUrl(file)));
         };
 
+        const ordersWithFileLinks = await Promise.all(orders.map(async (order) => {
+            const documentProvidedUrls = await getFileUrls(order.documentProvided);
+            const invoiceUploadedUrls = await getFileUrls(order.invoiceUploaded);
+            const fileUploadedUrls = await getFileUrls(order.fileUploaded);
+
+            return {
+                ...order,
+                documentProvided: documentProvidedUrls,
+                invoiceUploaded: invoiceUploadedUrls,
+                fileUploaded: fileUploadedUrls
+            };
+        }));
+
         res.status(200).json({
-            user,
-            files
+            orders: ordersWithFileLinks,
+            nextCursor: hasNextPage ? orders[orders.length - 1].id : null,
+            hasNextPage
         });
     } catch (error) {
         console.log(error);
-        res.status(500).json({
-            message: "Can't retrieve user, something went wrong"
+        res.status(400).json({
+            message: "Something went wrong"
         });
     }
-}
+};
 
-
-export const orders = async (req : Request , res : Response) => {
-    try {
-        const user = (req as IGetUserAuthInfoRequest).user;
-        const myOrders = await prisma.order.findMany({
-            where : {
-                userId : user.id
-            }
-        })
-
-        res.status(200).json({
-            myOrders,
-            message : "these are ur order"
-        })
-    } catch (error) {
-        res.status(400).json({
-            message : "something went wrong"
-        })
-    }
-}
 
 interface MulterFiles {
     panCard?: Express.Multer.File[];
@@ -203,12 +248,12 @@ interface MulterFiles {
     agreementFile?: Express.Multer.File[];
     qunatifoFile?: Express.Multer.File[];
     udhyanFile?: Express.Multer.File[];
+    otherFile?: Express.Multer.File[];
 }
 
-export const updateUser = async (req: Request, res: Response):Promise<void> => {
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
     try {
-        const temp = (req as IGetUserAuthInfoRequest).user;
-        const id = temp.id;
+        const id = parseInt(req.params.id);
         const gstNumber = req.body.gstNumber;
         const name = req.body.name;
         const type = req.body.type;
@@ -218,64 +263,32 @@ export const updateUser = async (req: Request, res: Response):Promise<void> => {
         const dpiitDate = req.body.dpiitDate;
 
         const files = req.files as MulterFiles;
-        const panCardFile = files.panCard?.[0];
-        const tdsFile = files.tdsFile?.[0];
-        const gstFile = files.gstFile?.[0];
-        const ndaFile = files.ndaFile?.[0];
-        const dpiitFile = files.dpiitFile?.[0];
-        const agreementFile = files.agreementFile?.[0];
-        const qunatifoFile = files.qunatifoFile?.[0];
-        const udhyanFile = files.udhyanFile?.[0];
+        const panCardFiles = files.panCard || [];
+        const tdsFiles = files.tdsFile || [];
+        const gstFiles = files.gstFile || [];
+        const ndaFiles = files.ndaFile || [];
+        const dpiitFiles = files.dpiitFile || [];
+        const agreementFiles = files.agreementFile || [];
+        const qunatifoFiles = files.qunatifoFile || [];
+        const udhyanFiles = files.udhyanFile || [];
+        const otherFiles = files.otherFile || [];
 
-        let panCardPath: string | null = null;
-        let tdsFilePath: string | null = null;
-        let gstFilePath: string | null = null;
-        let ndaFilePath: string | null = null;
-        let dpiitFilePath: string | null = null;
-        let agreementFilePath: string | null = null;
-        let qunatifoFilePath: string | null = null;
-        let udhyanFilePath: string | null = null;
+        const uploadPromises = [
+            ...panCardFiles.map(file => uploadFile(file, 'pancards')),
+            ...tdsFiles.map(file => uploadFile(file, 'tdsfiles')),
+            ...gstFiles.map(file => uploadFile(file, 'gstfiles')),
+            ...ndaFiles.map(file => uploadFile(file, 'ndafiles')),
+            ...dpiitFiles.map(file => uploadFile(file, 'dpiitfiles')),
+            ...agreementFiles.map(file => uploadFile(file, 'agreementfiles')),
+            ...qunatifoFiles.map(file => uploadFile(file, 'qunatifofiles')),
+            ...udhyanFiles.map(file => uploadFile(file, 'udhyanfiles')),
+            ...otherFiles.map(file => uploadFile(file, 'otherfiles'))
+        ];
 
-        let dpiitBool;
-        if (dpiit === "true") {
-            dpiitBool = true;
-        } else {
-            dpiitBool = false;
-        }
+        const filePaths = await Promise.all(uploadPromises);
 
-        if (panCardFile) {
-            panCardPath = await uploadFile(panCardFile, 'pancards');
-        }
+        const dpiitBool = dpiit === "true";
 
-        if (tdsFile) {
-            tdsFilePath = await uploadFile(tdsFile, 'tdsfiles');
-        }
-
-        if (gstFile) {
-            gstFilePath = await uploadFile(gstFile, 'gstfiles');
-        }
-
-        if (ndaFile) {
-            ndaFilePath = await uploadFile(ndaFile, 'ndafiles');
-        }
-
-        if (dpiitFile) {
-            dpiitFilePath = await uploadFile(dpiitFile, 'dpiitfiles');
-        }
-
-        if (agreementFile) {
-            agreementFilePath = await uploadFile(agreementFile, 'agreementfiles');
-        }
-
-        if (qunatifoFile) {
-            qunatifoFilePath = await uploadFile(qunatifoFile, 'qunatifofiles');
-        }
-
-        if (udhyanFile) {
-            udhyanFilePath = await uploadFile(udhyanFile, 'udhyanfiles');
-        }
-
-        // Validate and parse dpiitDate
         let parsedDpiitDate: Date | null = null;
         if (dpiitDate) {
             parsedDpiitDate = new Date(dpiitDate);
@@ -297,14 +310,15 @@ export const updateUser = async (req: Request, res: Response):Promise<void> => {
                 pocName: pocName,
                 dpiit: dpiitBool,
                 dpiitDate: parsedDpiitDate,
-                // panCard: panCardPath,
-                // tdsFile: tdsFilePath,
-                // gstFile: gstFilePath,
-                // ndaFile: ndaFilePath,
-                // dpiitFile: dpiitFilePath,
-                // agreementFile: agreementFilePath,
-                // qunatifoFile: qunatifoFilePath,
-                // udhyanFile: udhyanFilePath
+                panCard: panCardFiles.map((_, index) => filePaths[index]),
+                tdsFile: tdsFiles.map((_, index) => filePaths[panCardFiles.length + index]),
+                gstFile: gstFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + index]),
+                ndaFile: ndaFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + index]),
+                dpiitFile: dpiitFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + index]),
+                agreementFile: agreementFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + index]),
+                qunatifoFile: qunatifoFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + agreementFiles.length + index]),
+                udhyanFile: udhyanFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + agreementFiles.length + qunatifoFiles.length + index]),
+                otherFile: otherFiles.map((_, index) => filePaths[panCardFiles.length + tdsFiles.length + gstFiles.length + ndaFiles.length + dpiitFiles.length + agreementFiles.length + qunatifoFiles.length + udhyanFiles.length + index])
             }
         });
 
@@ -327,11 +341,12 @@ interface UploadMulterFiles{
 
 export const updateOrder = async (req: Request, res: Response) => {
     try {
-        const id = (req as IGetUserAuthInfoRequest).user.id;
-        const orderId = parseInt(req.body.orderId);
+        const userId = (req as IGetUserAuthInfoRequest).user.id;
+        const orderId = parseInt(req.params.id);
+        // console.log(userId, orderId)     
 
         const existingOrder = await prisma.order.findUnique({
-            where: { id: orderId, userId: id }
+            where: { id: orderId, userId: userId }
         });
 
         if (!existingOrder) {
@@ -351,16 +366,45 @@ export const updateOrder = async (req: Request, res: Response) => {
             ...documentProvidedPaths
         ];
 
-        const nextActionClient = req.body.nextActionClient;
+
+        const {
+            dateOfOrder,
+            typeOfOrder,
+            payementExpected,
+            amountCharged,
+            amountPaid,
+            orderStatus,
+            commentStatusCycle,
+            dateOdExpectation,
+            nextActionLawyer,
+            nextActionClient,
+            govtAppNumber,
+            dateOfFilling,
+            inmNumber,
+            orderCompleteDate
+        } = req.body;
 
         const order = await prisma.order.update({
             where: {
                 id: orderId,
-                userId: id
+                userId: userId
             },
             data: {
+                dateOfOrder: dateOfOrder || existingOrder.dateOfOrder,
+                typeOfOrder: typeOfOrder || existingOrder.typeOfOrder,
+                payementExpected: payementExpected || existingOrder.payementExpected,
+                amountCharged: amountCharged !== undefined ? parseFloat(amountCharged) : existingOrder.amountCharged,
+                amountPaid: amountPaid !== undefined ? parseFloat(amountPaid) : existingOrder.amountPaid,
+                orderStatus: orderStatus || existingOrder.orderStatus,
+                commentStatusCycle: commentStatusCycle ? commentStatusCycle.split(',').map((item: string) => item.trim()) : existingOrder.commentStatusCycle,
+                dateOdExpectation: dateOdExpectation || existingOrder.dateOdExpectation,
                 documentProvided: updatedDocumentProvided,
-                nextActionClient: nextActionClient
+                nextActionLawyer: nextActionLawyer || existingOrder.nextActionLawyer,
+                nextActionClient: nextActionClient || existingOrder.nextActionClient,
+                govtAppNumber: govtAppNumber !== undefined ? parseInt(govtAppNumber) : existingOrder.govtAppNumber,
+                dateOfFilling: dateOfFilling || existingOrder.dateOfFilling,
+                inmNumber: inmNumber || existingOrder.inmNumber,
+                orderCompleteDate: orderCompleteDate || existingOrder.orderCompleteDate
             }
         });
 
@@ -375,25 +419,3 @@ export const updateOrder = async (req: Request, res: Response) => {
         });
     }
 };
-
-
-export const downloadFile = async (req : Request, res: Response) =>{
-    try {
-        const id = (req as IGetUserAuthInfoRequest).user.id;
-        const orderId = parseInt(req.body.orderId);
-
-        
-
-        const path = req.body.path;
-        const downloadURL =await getPublicUrl(path);
-        res.status(200).json({
-            message : "this is ur download link",
-            downloadURL
-        })
-    } catch (error) {
-        res.json(404).json({
-            message : "cant download this now"
-        })
-    }
-}
-

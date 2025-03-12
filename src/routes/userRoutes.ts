@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { getUser, login, orders , updateUser , updateOrder, downloadFile, forgetPassword, resetPassword } from "../controller/userController";
+import { getUser, login, orders , updateUser , updateOrder, forgetPassword, resetPassword } from "../controller/userController";
 import { userAuthMiddleware } from "../middleware/userAuthMiddleware";
 import { upload } from "../config/multerConfig";
 
@@ -8,22 +8,23 @@ const userRoutes = Router();
 userRoutes.post('/login',login);
 userRoutes.post('/forget-password', forgetPassword);
 userRoutes.post('/reset-password/:id/:token', resetPassword);
-userRoutes.post('/update-user', upload.fields([
-    { name: 'panCard' },
-    { name: 'tdsFile' },
-    { name: 'gstFile' },
-    { name: 'ndaFile' },
-    { name: 'dpiitFile' },
-    { name: 'agreementFile' },
-    { name: 'qunatifoFile' },
-    { name: 'udhyanFile' }
-]), userAuthMiddleware,updateUser);
+
 userRoutes.get('/get-user',userAuthMiddleware , getUser);
+userRoutes.put('/update-user/:id', upload.fields([
+    { name: 'panCard', maxCount: 5 },
+    { name: 'tdsFile', maxCount: 5 },
+    { name: 'gstFile', maxCount: 5 },
+    { name: 'ndaFile', maxCount: 5 },
+    { name: 'dpiitFile', maxCount: 5 },
+    { name: 'agreementFile', maxCount: 5 },
+    { name: 'qunatifoFile', maxCount: 5 },
+    { name: 'udhyanFile', maxCount: 5 },
+    { name: 'otherFile', maxCount: 5 }
+    ]), userAuthMiddleware , updateUser);
 userRoutes.get('/orders',userAuthMiddleware, orders);
-userRoutes.post('/update-order',userAuthMiddleware , upload.fields([
+userRoutes.put('/update-order/:id',userAuthMiddleware , upload.fields([
     { name: 'documentProvided', maxCount: 10 }
-]), updateOrder);
-userRoutes.get('/download-link',userAuthMiddleware, downloadFile)
+]), userAuthMiddleware , updateOrder);
 
 
 export default userRoutes;
