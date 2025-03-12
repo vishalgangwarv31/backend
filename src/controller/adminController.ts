@@ -1031,7 +1031,7 @@ export const getUserVisibilitySettings = async (req: Request, res: Response) => 
 export const updateUserVisibilitySettings = async (req: Request, res: Response) => {
   try {
     const { settings } = req.body; // settings should be an array of { fieldName, isVisible }
-
+    
     const updatePromises = settings.map(async (setting: { fieldName: string, isVisible: boolean }) => {
         const existingSetting = await prisma.userVisibilitySetting.findUnique({
             where: { fieldName: setting.fieldName }
